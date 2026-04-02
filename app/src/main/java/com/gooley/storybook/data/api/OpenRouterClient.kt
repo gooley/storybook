@@ -78,7 +78,7 @@ Page text: "$pageText"
 Style: Sharp pen and ink illustration with bold lines. Use a limited palette of 6 highly saturated colors suitable for a color e-ink display. The illustration should be simple, clear, and appealing to young children. No text in the image."""
 
             val request = ChatRequest(
-                model = "google/gemini-2.5-flash-preview",
+                model = "google/gemini-3.1-flash-image-preview",
                 messages = listOf(
                     ChatMessage(role = "user", content = prompt)
                 ),
