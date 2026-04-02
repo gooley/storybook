@@ -53,28 +53,32 @@ class BookRepository(context: Context) {
             // Retrieve saved pages (to get auto-generated IDs)
             val savedPages = pageDao.getPagesForBookOnce(bookId)
 
-            // Generate illustrations for each page
+            // Generate illustrations for each page, passing previous image for consistency
+            var previousImageFile: File? = null
             for ((index, page) in savedPages.withIndex()) {
                 onProgress("Drawing illustration ${index + 1} of ${savedPages.size}...")
                 val imageFile = File(imagesDir, "book_${bookId}_page_${page.pageNumber}.png")
 
                 pageDao.updateImageStatus(page.id, Page.IMAGE_GENERATING)
-                val success = apiClient.generateIllustration(page.text, title, imageFile)
+                val success = apiClient.generateIllustration(page.text, title, imageFile, previousImageFile)
 
                 if (success) {
                     pageDao.updateImage(page.id, imageFile.absolutePath, Page.IMAGE_DONE)
+                    previousImageFile = imageFile
                 } else {
                     pageDao.updateImageStatus(page.id, Page.IMAGE_ERROR)
                 }
             }
 
-            // Generate cover image
+            // Generate cover image using first page's illustration as reference
             onProgress("Creating cover...")
             val coverFile = File(imagesDir, "book_${bookId}_cover.png")
+            val firstPageImage = File(imagesDir, "book_${bookId}_page_1.png")
             val coverSuccess = apiClient.generateIllustration(
                 "Book cover for: $description",
                 title,
-                coverFile
+                coverFile,
+                if (firstPageImage.exists()) firstPageImage else null
             )
             if (coverSuccess) {
                 bookDao.updateCoverImagePath(bookId, coverFile.absolutePath)
@@ -99,16 +103,21 @@ class BookRepository(context: Context) {
         val book = bookDao.getById(bookId) ?: return
         val pages = pageDao.getPagesForBookOnce(bookId)
 
+        var previousImageFile: File? = null
         for ((index, page) in pages.withIndex()) {
-            if (page.imageStatus == Page.IMAGE_DONE && page.imagePath != null) continue
-            onProgress("Drawing illustration ${index + 1} of ${pages.size}...")
             val imageFile = File(imagesDir, "book_${bookId}_page_${page.pageNumber}.png")
+            if (page.imageStatus == Page.IMAGE_DONE && page.imagePath != null) {
+                previousImageFile = imageFile
+                continue
+            }
+            onProgress("Drawing illustration ${index + 1} of ${pages.size}...")
 
             pageDao.updateImageStatus(page.id, Page.IMAGE_GENERATING)
-            val success = apiClient.generateIllustration(page.text, book.title, imageFile)
+            val success = apiClient.generateIllustration(page.text, book.title, imageFile, previousImageFile)
 
             if (success) {
                 pageDao.updateImage(page.id, imageFile.absolutePath, Page.IMAGE_DONE)
+                previousImageFile = imageFile
             } else {
                 pageDao.updateImageStatus(page.id, Page.IMAGE_ERROR)
             }
@@ -118,10 +127,12 @@ class BookRepository(context: Context) {
         if (book.coverImagePath == null) {
             onProgress("Creating cover...")
             val coverFile = File(imagesDir, "book_${bookId}_cover.png")
+            val firstPageImage = File(imagesDir, "book_${bookId}_page_1.png")
             val success = apiClient.generateIllustration(
                 "Book cover for: ${book.description}",
                 book.title,
-                coverFile
+                coverFile,
+                if (firstPageImage.exists()) firstPageImage else null
             )
             if (success) {
                 bookDao.updateCoverImagePath(bookId, coverFile.absolutePath)

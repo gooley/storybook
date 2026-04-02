@@ -7,6 +7,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -28,6 +31,30 @@ class OpenRouterClient {
 
     private val apiKey = BuildConfig.OPENROUTER_API_KEY
     private val baseUrl = "https://openrouter.ai/api/v1/chat/completions"
+
+    private fun textContent(text: String) = JsonPrimitive(text)
+
+    private fun multimodalContent(text: String, imageFile: File? = null): JsonArray {
+        val parts = mutableListOf<JsonObject>()
+
+        if (imageFile != null && imageFile.exists()) {
+            val bytes = imageFile.readBytes()
+            val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            parts.add(JsonObject(mapOf(
+                "type" to JsonPrimitive("image_url"),
+                "image_url" to JsonObject(mapOf(
+                    "url" to JsonPrimitive("data:image/png;base64,$b64")
+                ))
+            )))
+        }
+
+        parts.add(JsonObject(mapOf(
+            "type" to JsonPrimitive("text"),
+            "text" to JsonPrimitive(text)
+        )))
+
+        return JsonArray(parts)
+    }
 
     suspend fun generateStory(title: String, description: String, pageCount: Int = 8): List<StoryPage> =
         withContext(Dispatchers.IO) {
@@ -52,8 +79,8 @@ class OpenRouterClient {
             val request = ChatRequest(
                 model = "anthropic/claude-sonnet-4.6",
                 messages = listOf(
-                    ChatMessage(role = "system", content = systemPrompt),
-                    ChatMessage(role = "user", content = userPrompt)
+                    ChatMessage(role = "system", content = textContent(systemPrompt)),
+                    ChatMessage(role = "user", content = textContent(userPrompt))
                 )
             )
 
@@ -67,26 +94,39 @@ class OpenRouterClient {
     suspend fun generateIllustration(
         pageText: String,
         bookTitle: String,
-        outputFile: File
+        outputFile: File,
+        previousImageFile: File? = null
     ): Boolean = withContext(Dispatchers.IO) {
         try {
-            val prompt = """Generate an illustration for a children's storybook page.
+            val prompt = buildString {
+                append("Generate an illustration for a children's storybook page.\n\n")
+                append("Book title: \"$bookTitle\"\n")
+                append("Page text: \"$pageText\"\n\n")
+                if (previousImageFile != null && previousImageFile.exists()) {
+                    append("I've attached the previous page's illustration. ")
+                    append("Keep a consistent art style, color palette, and character designs.\n\n")
+                }
+                append("Style: Sharp pen and ink illustration with bold lines. ")
+                append("Use a limited palette of 6 highly saturated colors suitable for a color e-ink display. ")
+                append("The illustration should be simple, clear, and appealing to young children. No text in the image.")
+            }
 
-Book title: "$bookTitle"
-Page text: "$pageText"
-
-Style: Sharp pen and ink illustration with bold lines. Use a limited palette of 6 highly saturated colors suitable for a color e-ink display. The illustration should be simple, clear, and appealing to young children. No text in the image."""
+            val content = if (previousImageFile != null && previousImageFile.exists()) {
+                multimodalContent(prompt, previousImageFile)
+            } else {
+                multimodalContent(prompt)
+            }
 
             val request = ChatRequest(
                 model = "google/gemini-3.1-flash-image-preview",
                 messages = listOf(
-                    ChatMessage(role = "user", content = prompt)
+                    ChatMessage(role = "user", content = content)
                 ),
                 maxTokens = 4096
             )
 
             val body = json.encodeToString(request)
-            Log.d(TAG, "Image generation request for: ${pageText.take(50)}...")
+            Log.d(TAG, "Image gen request (with prev=${previousImageFile?.exists()}): ${pageText.take(50)}...")
 
             val httpRequest = Request.Builder()
                 .url(baseUrl)
@@ -103,8 +143,6 @@ Style: Sharp pen and ink illustration with bold lines. Use a limited palette of 
                 return@withContext false
             }
 
-            // Parse the response - Gemini returns inline_data with base64 image
-            Log.d(TAG, "Image response (first 500): ${responseBody.take(500)}")
             val imageData = extractImageData(responseBody)
             if (imageData != null) {
                 val bytes = Base64.decode(imageData, Base64.DEFAULT)

@@ -2,6 +2,7 @@ package com.gooley.storybook.data.api
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 @Serializable
 data class ChatRequest(
@@ -15,7 +16,7 @@ data class ChatRequest(
 @Serializable
 data class ChatMessage(
     val role: String,
-    val content: String
+    val content: JsonElement // String or array of content parts
 )
 
 @Serializable
@@ -26,15 +27,13 @@ data class ChatResponse(
 
 @Serializable
 data class Choice(
-    val message: ChatMessage? = null,
+    val message: ChatMessageResponse? = null,
     @SerialName("finish_reason")
     val finishReason: String? = null
 )
 
 @Serializable
-data class ImageGenerationRequest(
-    val model: String,
-    val messages: List<ChatMessage>,
-    @SerialName("max_tokens")
-    val maxTokens: Int = 4096
+data class ChatMessageResponse(
+    val role: String = "",
+    val content: String? = null
 )
