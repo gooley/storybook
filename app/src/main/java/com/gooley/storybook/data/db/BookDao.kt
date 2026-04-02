@@ -29,5 +29,5 @@ interface BookDao {
     suspend fun updateStatus(id: Long, status: String)
 
     @Query("UPDATE books SET coverImagePath = :path WHERE id = :id")
-    suspend fun updateCoverImagePath(id: Long, path: String)
+    suspend fun updateCoverImagePath(id: Long, path: String?)
 }

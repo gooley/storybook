@@ -25,4 +25,7 @@ interface PageDao {
 
     @Query("UPDATE pages SET imageStatus = :status WHERE id = :id")
     suspend fun updateImageStatus(id: Long, status: String)
+
+    @Query("UPDATE pages SET imagePath = NULL, imageStatus = 'pending' WHERE bookId = :bookId AND pageNumber != 1")
+    suspend fun resetImagesExceptFirst(bookId: Long)
 }
