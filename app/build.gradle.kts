@@ -6,6 +6,14 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+import java.util.Properties
+
+val localProperties = Properties()
+val localPropsFile = rootProject.file("local.properties")
+if (localPropsFile.exists()) {
+    localPropsFile.inputStream().use { localProperties.load(it) }
+}
+
 android {
     namespace = "com.gooley.storybook"
     compileSdk = 35
@@ -20,7 +28,7 @@ android {
         buildConfigField(
             "String",
             "OPENROUTER_API_KEY",
-            "\"${project.findProperty("OPENROUTER_API_KEY") ?: ""}\""
+            "\"${localProperties.getProperty("OPENROUTER_API_KEY", "")}\""
         )
     }
 
