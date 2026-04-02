@@ -108,7 +108,8 @@ class OpenRouterClient {
                 }
                 append("Style: Sharp pen and ink illustration with bold lines. ")
                 append("Use a limited palette of 6 highly saturated colors suitable for a color e-ink display. ")
-                append("The illustration should be simple, clear, and appealing to young children. No text in the image.")
+                append("The illustration should be simple, clear, and appealing to young children.\n\n")
+                append("IMPORTANT: Do NOT include any text, words, letters, numbers, captions, titles, labels, or writing of any kind in the image. The image must contain only visual artwork with zero text.")
             }
 
             val content = if (previousImageFile != null && previousImageFile.exists()) {
