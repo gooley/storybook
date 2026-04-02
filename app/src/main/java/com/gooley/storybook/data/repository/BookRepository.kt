@@ -92,6 +92,44 @@ class BookRepository(context: Context) {
         return bookId
     }
 
+    suspend fun regenerateIllustrations(
+        bookId: Long,
+        onProgress: (String) -> Unit
+    ) {
+        val book = bookDao.getById(bookId) ?: return
+        val pages = pageDao.getPagesForBookOnce(bookId)
+
+        for ((index, page) in pages.withIndex()) {
+            if (page.imageStatus == Page.IMAGE_DONE && page.imagePath != null) continue
+            onProgress("Drawing illustration ${index + 1} of ${pages.size}...")
+            val imageFile = File(imagesDir, "book_${bookId}_page_${page.pageNumber}.png")
+
+            pageDao.updateImageStatus(page.id, Page.IMAGE_GENERATING)
+            val success = apiClient.generateIllustration(page.text, book.title, imageFile)
+
+            if (success) {
+                pageDao.updateImage(page.id, imageFile.absolutePath, Page.IMAGE_DONE)
+            } else {
+                pageDao.updateImageStatus(page.id, Page.IMAGE_ERROR)
+            }
+        }
+
+        // Cover too if missing
+        if (book.coverImagePath == null) {
+            onProgress("Creating cover...")
+            val coverFile = File(imagesDir, "book_${bookId}_cover.png")
+            val success = apiClient.generateIllustration(
+                "Book cover for: ${book.description}",
+                book.title,
+                coverFile
+            )
+            if (success) {
+                bookDao.updateCoverImagePath(bookId, coverFile.absolutePath)
+            }
+        }
+        onProgress("Done!")
+    }
+
     companion object {
         private const val TAG = "BookRepository"
     }

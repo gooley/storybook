@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -42,6 +43,15 @@ fun ReaderScreen(
     val viewModel = remember { ReaderViewModel(repository, bookId) }
     val book by viewModel.book.collectAsState()
     val pages by viewModel.pages.collectAsState()
+    val isRegenerating by viewModel.isRegenerating.collectAsState()
+    val progress by viewModel.progress.collectAsState()
+
+    // Auto-regenerate illustrations if any are missing
+    LaunchedEffect(pages) {
+        if (pages.isNotEmpty() && pages.any { it.imageStatus != Page.IMAGE_DONE }) {
+            viewModel.regenerateIllustrations()
+        }
+    }
 
     Scaffold { innerPadding ->
         if (pages.isEmpty()) {
