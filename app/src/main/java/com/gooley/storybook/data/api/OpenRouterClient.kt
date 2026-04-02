@@ -104,6 +104,7 @@ Style: Sharp pen and ink illustration with bold lines. Use a limited palette of 
             }
 
             // Parse the response - Gemini returns inline_data with base64 image
+            Log.d(TAG, "Image response (first 500): ${responseBody.take(500)}")
             val imageData = extractImageData(responseBody)
             if (imageData != null) {
                 val bytes = Base64.decode(imageData, Base64.DEFAULT)
@@ -121,33 +122,34 @@ Style: Sharp pen and ink illustration with bold lines. Use a limited palette of 
     }
 
     private fun extractImageData(responseJson: String): String? {
-        // Parse the multimodal response to find base64 image data
-        // Gemini via OpenRouter returns content parts with inline_data
+        // OpenRouter returns image data in message.images[0].image_url.url
+        // as a data URI: "data:image/png;base64,<data>"
         return try {
             val parsed = json.parseToJsonElement(responseJson)
             val choices = parsed.asObject()["choices"]?.asArray() ?: return null
             val message = choices.firstOrNull()?.asObject()?.get("message")?.asObject() ?: return null
+
+            // Check message.images array (OpenRouter image model format)
+            val images = message["images"]?.asArray()
+            if (images != null && images.isNotEmpty()) {
+                val imageObj = images.first().asObject()
+                val imageUrl = imageObj["image_url"]?.asObject()
+                val url = imageUrl?.get("url")?.let {
+                    (it as? kotlinx.serialization.json.JsonPrimitive)?.content
+                }
+                if (url != null && url.contains("base64,")) {
+                    return url.substringAfter("base64,")
+                }
+            }
+
+            // Fallback: check content for base64 data URI
             val content = message["content"]
-
-            // Content might be a string with markdown image, or structured parts
-            val contentStr = content?.toString() ?: return null
-
-            // Check for inline base64 in multipart content
-            val parts = message["content"]
-            if (parts != null) {
-                val partsStr = parts.toString()
-                // Look for base64 image data in the response
+            if (content != null) {
+                val contentStr = content.toString()
                 val base64Regex = Regex("""data:image/[^;]+;base64,([A-Za-z0-9+/=]+)""")
-                val match = base64Regex.find(partsStr)
+                val match = base64Regex.find(contentStr)
                 if (match != null) {
                     return match.groupValues[1]
-                }
-
-                // Try parsing as multipart content array
-                val inlineDataRegex = Regex(""""data"\s*:\s*"([A-Za-z0-9+/=\n]+)"""")
-                val inlineMatch = inlineDataRegex.find(partsStr)
-                if (inlineMatch != null) {
-                    return inlineMatch.groupValues[1].replace("\n", "")
                 }
             }
 
