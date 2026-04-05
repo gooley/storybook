@@ -1,5 +1,8 @@
 [app]
 name = "storybook"
-port = 3000
-health_path = "/api/healthz"
 hostnames = ["storybook.gool3y.com"]
+port = 3000
+health_path = "/healthz"
+
+[app.auth]
+group = ["family"]

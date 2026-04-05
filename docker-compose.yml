@@ -3,21 +3,24 @@ services:
     image: ${ECR_URI}:storybook-${IMAGE_TAG}
     restart: unless-stopped
     environment:
-      - API_KEY=${API_KEY}
-      - NODE_ENV=production
-      - DATA_DIR=/app/data
+    - API_KEY=${API_KEY}
+    - NODE_ENV=production
+    - DATA_DIR=/app/data
     volumes:
-      - storybook-data:/app/data
+    - storybook-data:/app/data
     networks:
-      - gool3yhost
+    - gool3yhost
     labels:
-      - traefik.enable=true
-      - "traefik.http.routers.storybook.rule=Host(`storybook.gool3y.com`)"
-      - traefik.http.services.storybook.loadbalancer.server.port=3000
-
+    - traefik.enable=true
+    - traefik.http.routers.storybook.rule=Host(`storybook.gool3y.com`)
+    - traefik.http.services.storybook.loadbalancer.server.port=3000
+    - traefik.http.routers.storybook.middlewares=storybook-auth-group,storybook-fwdauth
+    - traefik.http.middlewares.storybook-auth-group.headers.customrequestheaders.X-Auth-Required-Group=family
+    - traefik.http.middlewares.storybook-fwdauth.forwardauth.address=http://auth:8000/verify
+    - traefik.http.middlewares.storybook-fwdauth.forwardauth.authResponseHeaders=X-Auth-Email,X-Auth-Name,X-Auth-Groups
+    - traefik.http.middlewares.storybook-fwdauth.forwardauth.trustForwardHeader=true
 volumes:
-  storybook-data:
-
+  storybook-data: null
 networks:
   gool3yhost:
     external: true
