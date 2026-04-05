@@ -2,14 +2,19 @@ package com.gooley.storybook.ui.create
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -26,18 +31,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gooley.storybook.data.db.CharacterDao
+import com.gooley.storybook.data.model.Character
 import com.gooley.storybook.data.repository.BookRepository
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CreateBookScreen(
     repository: BookRepository,
+    characterDao: CharacterDao,
     onBookCreated: (Long) -> Unit,
     onBack: () -> Unit
 ) {
-    val viewModel = remember { CreateBookViewModel(repository) }
+    val viewModel = remember { CreateBookViewModel(repository, characterDao) }
     val uiState by viewModel.uiState.collectAsState()
 
-    // Navigate when book is created
     LaunchedEffect(uiState.createdBookId) {
         uiState.createdBookId?.let { onBookCreated(it) }
     }
@@ -48,7 +56,6 @@ fun CreateBookScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Top bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -68,7 +75,8 @@ fun CreateBookScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 24.dp),
+                    .padding(horizontal = 24.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.Top
             ) {
                 Spacer(modifier = Modifier.height(16.dp))
@@ -89,25 +97,74 @@ fun CreateBookScreen(
                     value = uiState.description,
                     onValueChange = viewModel::updateDescription,
                     label = { Text("What's the story about?") },
-                    placeholder = { Text("Describe the gist of the story — characters, setting, what happens...") },
+                    placeholder = { Text("Describe the gist — characters, setting, what happens...") },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(160.dp),
+                        .height(140.dp),
                     enabled = !uiState.isGenerating,
                     maxLines = 6
                 )
 
+                // Character selection
+                if (uiState.availableCharacters.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Text(
+                        text = "Include characters:",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    val family = uiState.availableCharacters.filter { it.type == Character.TYPE_FAMILY }
+                    val friends = uiState.availableCharacters.filter { it.type == Character.TYPE_FRIEND }
+
+                    if (family.isNotEmpty()) {
+                        Text("Family", style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        ) {
+                            family.forEach { character ->
+                                val selected = character.id in uiState.selectedCharacterIds
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = { viewModel.toggleCharacter(character.id) },
+                                    label = { Text(character.name) },
+                                    enabled = !uiState.isGenerating
+                                )
+                            }
+                        }
+                    }
+
+                    if (friends.isNotEmpty()) {
+                        Text("Friends", style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        ) {
+                            friends.forEach { character ->
+                                val selected = character.id in uiState.selectedCharacterIds
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = { viewModel.toggleCharacter(character.id) },
+                                    label = { Text(character.name) },
+                                    enabled = !uiState.isGenerating
+                                )
+                            }
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(24.dp))
 
                 if (uiState.isGenerating) {
-                    // Progress display
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        CircularProgressIndicator(
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = uiState.progress,
@@ -130,7 +187,6 @@ fun CreateBookScreen(
                     }
                 }
 
-                // Error display
                 uiState.error?.let { error ->
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
@@ -139,6 +195,8 @@ fun CreateBookScreen(
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
+
+                Spacer(modifier = Modifier.height(32.dp))
             }
         }
     }

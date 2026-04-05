@@ -40,18 +40,30 @@ import com.gooley.storybook.data.repository.BookRepository
 fun BookshelfScreen(
     repository: BookRepository,
     onBookClick: (Long) -> Unit,
-    onCreateClick: () -> Unit
+    onCreateClick: () -> Unit,
+    onCharactersClick: () -> Unit
 ) {
     val viewModel = remember { BookshelfViewModel(repository) }
     val books by viewModel.books.collectAsState()
 
     Scaffold(
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = onCreateClick,
-                containerColor = MaterialTheme.colorScheme.primary
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("＋", fontSize = 24.sp, color = MaterialTheme.colorScheme.onPrimary)
+                FloatingActionButton(
+                    onClick = onCharactersClick,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Text("👤", fontSize = 22.sp)
+                }
+                FloatingActionButton(
+                    onClick = onCreateClick,
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Text("＋", fontSize = 24.sp, color = MaterialTheme.colorScheme.onPrimary)
+                }
             }
         }
     ) { innerPadding ->
