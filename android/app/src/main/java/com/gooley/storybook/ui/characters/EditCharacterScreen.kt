@@ -198,11 +198,14 @@ fun EditCharacterScreen(
                         scope.launch {
                             val character = Character(
                                 id = existingCharacter?.id ?: 0,
+                                uuid = existingCharacter?.uuid ?: java.util.UUID.randomUUID().toString(),
                                 name = name,
                                 type = type,
                                 notes = notes,
                                 photoPath = photoPath,
-                                createdAt = existingCharacter?.createdAt ?: System.currentTimeMillis()
+                                createdAt = existingCharacter?.createdAt ?: System.currentTimeMillis(),
+                                updatedAt = System.currentTimeMillis(),
+                                dirty = true
                             )
                             if (existingCharacter != null) {
                                 characterDao.update(character)
@@ -224,7 +227,7 @@ fun EditCharacterScreen(
                     TextButton(
                         onClick = {
                             scope.launch {
-                                existingCharacter?.let { characterDao.delete(it) }
+                                existingCharacter?.let { characterDao.softDelete(it.id) }
                                 onSaved()
                             }
                         },

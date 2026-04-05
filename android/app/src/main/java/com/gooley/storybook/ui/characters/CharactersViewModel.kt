@@ -14,6 +14,6 @@ class CharactersViewModel(private val characterDao: CharacterDao) : ViewModel() 
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun deleteCharacter(character: Character) {
-        viewModelScope.launch { characterDao.delete(character) }
+        viewModelScope.launch { characterDao.softDelete(character.id) }
     }
 }

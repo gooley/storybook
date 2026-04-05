@@ -41,7 +41,8 @@ fun BookshelfScreen(
     repository: BookRepository,
     onBookClick: (Long) -> Unit,
     onCreateClick: () -> Unit,
-    onCharactersClick: () -> Unit
+    onCharactersClick: () -> Unit,
+    onSyncClick: () -> Unit = {}
 ) {
     val viewModel = remember { BookshelfViewModel(repository) }
     val books by viewModel.books.collectAsState()
@@ -52,6 +53,12 @@ fun BookshelfScreen(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                FloatingActionButton(
+                    onClick = onSyncClick,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Text("🔄", fontSize = 22.sp)
+                }
                 FloatingActionButton(
                     onClick = onCharactersClick,
                     containerColor = MaterialTheme.colorScheme.surfaceVariant

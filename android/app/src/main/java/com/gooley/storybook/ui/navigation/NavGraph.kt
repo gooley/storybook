@@ -9,6 +9,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.gooley.storybook.data.db.StorybookDatabase
 import com.gooley.storybook.data.repository.BookRepository
+import com.gooley.storybook.data.sync.SyncWorker
 import com.gooley.storybook.ui.bookshelf.BookshelfScreen
 import com.gooley.storybook.ui.characters.CharactersScreen
 import com.gooley.storybook.ui.characters.EditCharacterScreen
@@ -41,7 +42,8 @@ fun NavGraph() {
                 repository = repository,
                 onBookClick = { bookId -> navController.navigate(Routes.reader(bookId)) },
                 onCreateClick = { navController.navigate(Routes.CREATE) },
-                onCharactersClick = { navController.navigate(Routes.CHARACTERS) }
+                onCharactersClick = { navController.navigate(Routes.CHARACTERS) },
+                onSyncClick = { SyncWorker.syncNow(context) }
             )
         }
 

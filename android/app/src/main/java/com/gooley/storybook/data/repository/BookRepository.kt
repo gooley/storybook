@@ -25,7 +25,7 @@ class BookRepository(context: Context) {
 
     fun getPagesForBook(bookId: Long): Flow<List<Page>> = pageDao.getPagesForBook(bookId)
 
-    suspend fun deleteBook(book: Book) = bookDao.delete(book)
+    suspend fun deleteBook(book: Book) = bookDao.softDelete(book.id)
 
     suspend fun generateBook(
         title: String,
