@@ -1,5 +1,6 @@
 package com.gooley.storybook.ui.reader
 
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +24,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.gooley.storybook.data.model.Page
 import com.gooley.storybook.data.repository.BookRepository
+import kotlinx.coroutines.launch
 
 @Composable
 fun ReaderScreen(
@@ -48,8 +52,10 @@ fun ReaderScreen(
     val isRegenerating by viewModel.isRegenerating.collectAsState()
     val progress by viewModel.progress.collectAsState()
 
+    Log.d("ReaderScreen", "Render: bookId=$bookId, pages.size=${pages.size}, pages=${pages.map { "p${it.pageNumber}(${it.imageStatus})" }}")
+
     // Auto-regenerate illustrations if any are missing
-    LaunchedEffect(pages) {
+    LaunchedEffect(pages.map { it.imageStatus }) {
         if (pages.isNotEmpty() && pages.any { it.imageStatus != Page.IMAGE_DONE }) {
             viewModel.regenerateIllustrations()
         }
@@ -73,43 +79,59 @@ fun ReaderScreen(
                 }
             }
         } else {
-            val pagerState = rememberPagerState(pageCount = { pages.size })
+            // key() forces pager state recreation when page count changes
+            key(pages.size) {
+                val pagerState = rememberPagerState(pageCount = { pages.size })
+                val scope = rememberCoroutineScope()
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-            ) {
-                // Top bar with back button and title
-                Row(
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .fillMaxSize()
+                        .padding(innerPadding)
                 ) {
-                    IconButton(onClick = onBack) {
-                        Text("←", fontSize = 24.sp)
+                    // Top bar with back button, title, and page nav
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = onBack) {
+                            Text("←", fontSize = 24.sp)
+                        }
+                        Text(
+                            text = book?.title ?: "",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        // Prev/Next buttons (better for e-ink than swiping)
+                        IconButton(
+                            onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) } },
+                            enabled = pagerState.currentPage > 0
+                        ) {
+                            Text("‹", fontSize = 28.sp)
+                        }
+                        Text(
+                            text = "${pagerState.currentPage + 1}/${pages.size}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        IconButton(
+                            onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } },
+                            enabled = pagerState.currentPage < pages.size - 1
+                        ) {
+                            Text("›", fontSize = 28.sp)
+                        }
                     }
-                    Text(
-                        text = book?.title ?: "",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        text = "${pagerState.currentPage + 1} / ${pages.size}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(end = 16.dp)
-                    )
-                }
 
-                // Page content with swipe
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.fillMaxSize()
-                ) { pageIndex ->
-                    PageContent(page = pages[pageIndex])
+                    // Page content with swipe
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxSize()
+                    ) { pageIndex ->
+                        PageContent(page = pages[pageIndex])
+                    }
                 }
             }
         }

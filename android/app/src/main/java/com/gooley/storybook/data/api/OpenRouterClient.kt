@@ -250,13 +250,24 @@ class OpenRouterClient {
     }
 
     private fun parseStoryPages(content: String): List<StoryPage> {
-        // Extract JSON array from response (may be wrapped in markdown code block)
-        val jsonStr = content
+        Log.d(TAG, "Raw story response (${content.length} chars): ${content.take(500)}")
+
+        // Strip markdown code fences
+        var jsonStr = content
             .replace(Regex("```json\\s*"), "")
             .replace(Regex("```\\s*"), "")
             .trim()
 
-        return json.decodeFromString<List<StoryPage>>(jsonStr)
+        // If there's text before the JSON array, extract just the array
+        val arrayStart = jsonStr.indexOf('[')
+        val arrayEnd = jsonStr.lastIndexOf(']')
+        if (arrayStart >= 0 && arrayEnd > arrayStart) {
+            jsonStr = jsonStr.substring(arrayStart, arrayEnd + 1)
+        }
+
+        val pages = json.decodeFromString<List<StoryPage>>(jsonStr)
+        Log.d(TAG, "Parsed ${pages.size} story pages")
+        return pages
     }
 
     // Helper extensions for kotlinx JsonElement
