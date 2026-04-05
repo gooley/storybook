@@ -105,6 +105,27 @@ fun CreateBookScreen(
                     maxLines = 6
                 )
 
+                // Page count selection
+                Spacer(modifier = Modifier.height(20.dp))
+                Text(
+                    text = "Story length:",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(2 to "Short (2 pages)", 4 to "Medium (4 pages)", 8 to "Long (8 pages)").forEach { (count, label) ->
+                        FilterChip(
+                            selected = uiState.pageCount == count,
+                            onClick = { viewModel.updatePageCount(count) },
+                            label = { Text(label) },
+                            enabled = !uiState.isGenerating
+                        )
+                    }
+                }
+
                 // Character selection
                 if (uiState.availableCharacters.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(20.dp))

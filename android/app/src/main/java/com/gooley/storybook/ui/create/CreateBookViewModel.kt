@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 data class CreateBookUiState(
     val title: String = "",
     val description: String = "",
+    val pageCount: Int = 4,
     val isGenerating: Boolean = false,
     val progress: String = "",
     val error: String? = null,
@@ -44,6 +45,10 @@ class CreateBookViewModel(
         _uiState.value = _uiState.value.copy(description = description)
     }
 
+    fun updatePageCount(count: Int) {
+        _uiState.value = _uiState.value.copy(pageCount = count)
+    }
+
     fun toggleCharacter(id: Long) {
         val current = _uiState.value.selectedCharacterIds
         _uiState.value = _uiState.value.copy(
@@ -63,6 +68,7 @@ class CreateBookViewModel(
                 val bookId = repository.generateBook(
                     title = state.title,
                     description = state.description,
+                    pageCount = state.pageCount,
                     selectedCharacterIds = state.selectedCharacterIds,
                     onProgress = { progress ->
                         _uiState.value = _uiState.value.copy(progress = progress)

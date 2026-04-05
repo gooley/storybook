@@ -65,7 +65,7 @@ class OpenRouterClient {
         return JsonArray(parts)
     }
 
-    suspend fun generateStory(title: String, description: String, pageCount: Int = 8): List<StoryPage> =
+    suspend fun generateStory(title: String, description: String, pageCount: Int = 4): List<StoryPage> =
         withContext(Dispatchers.IO) {
             val systemPrompt = """
                 You are a children's storybook author. Write a short, engaging story for young children (ages 3-7).

@@ -87,6 +87,7 @@ class BookRepository(context: Context) {
     suspend fun generateBook(
         title: String,
         description: String,
+        pageCount: Int = 4,
         selectedCharacterIds: Set<Long> = emptySet(),
         onProgress: (String) -> Unit
     ): Long {
@@ -112,7 +113,7 @@ class BookRepository(context: Context) {
         try {
             // Generate story text
             onProgress("Writing story with AI...")
-            val storyPages = apiClient.generateStory(title, enrichedDescription)
+            val storyPages = apiClient.generateStory(title, enrichedDescription, pageCount)
 
             // Save pages to DB
             val pages = storyPages.map { sp ->
