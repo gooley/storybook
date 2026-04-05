@@ -9,13 +9,14 @@ import com.gooley.storybook.data.api.OpenRouterClient
 import com.gooley.storybook.data.db.StorybookDatabase
 import com.gooley.storybook.data.model.Book
 import com.gooley.storybook.data.model.Page
+import com.gooley.storybook.data.sync.SyncWorker
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import java.io.File
 
-class BookRepository(context: Context) {
+class BookRepository(private val context: Context) {
     private val db = StorybookDatabase.getInstance(context)
     private val bookDao = db.bookDao()
     private val pageDao = db.pageDao()
@@ -174,7 +175,8 @@ class BookRepository(context: Context) {
             }
 
             bookDao.updateStatus(bookId, Book.STATUS_READY)
-            onProgress("Done!")
+            onProgress("Done! Syncing...")
+            SyncWorker.syncNow(context)
         } catch (e: Exception) {
             Log.e(TAG, "Book generation failed", e)
             bookDao.updateStatus(bookId, Book.STATUS_ERROR)
