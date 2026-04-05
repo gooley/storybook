@@ -76,6 +76,7 @@ class OpenRouterClient {
                 - Use simple, vivid language that children enjoy
                 - The story should have a clear beginning, middle, and end
                 - Include descriptive scenes that would make good illustrations
+                - Do NOT describe characters' physical appearances in the text (e.g. don't say "Dana, a 3 year old with curly blonde hair"). The reader already knows the characters — just use their names naturally.
                 
                 Format your response as a JSON array of objects with "pageNumber" and "text" fields.
                 Example: [{"pageNumber": 1, "text": "Once upon a time..."}, {"pageNumber": 2, "text": "The next thing..."}]
