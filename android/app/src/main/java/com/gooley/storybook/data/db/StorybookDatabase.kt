@@ -37,42 +37,97 @@ abstract class StorybookDatabase : RoomDatabase() {
 
         private val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                // Add sync columns to books
-                db.execSQL("ALTER TABLE books ADD COLUMN uuid TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE books ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
-                db.execSQL("ALTER TABLE books ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1")
-                db.execSQL("ALTER TABLE books ADD COLUMN deletedAt INTEGER")
+                // Room requires columns have NO SQL-level DEFAULT, so we must
+                // recreate tables rather than ALTER TABLE ADD COLUMN ... DEFAULT.
 
-                // Add sync columns to pages
-                db.execSQL("ALTER TABLE pages ADD COLUMN uuid TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE pages ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
-                db.execSQL("ALTER TABLE pages ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1")
-                db.execSQL("ALTER TABLE pages ADD COLUMN deletedAt INTEGER")
+                // 1. Save existing data
+                db.execSQL("CREATE TABLE temp_books AS SELECT * FROM books")
+                db.execSQL("CREATE TABLE temp_pages AS SELECT * FROM pages")
+                db.execSQL("CREATE TABLE temp_characters AS SELECT * FROM characters")
 
-                // Add sync columns to characters
-                db.execSQL("ALTER TABLE characters ADD COLUMN uuid TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE characters ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
-                db.execSQL("ALTER TABLE characters ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1")
-                db.execSQL("ALTER TABLE characters ADD COLUMN deletedAt INTEGER")
+                // 2. Drop old tables (children first)
+                db.execSQL("DROP TABLE IF EXISTS pages")
+                db.execSQL("DROP TABLE IF EXISTS books")
+                db.execSQL("DROP TABLE IF EXISTS characters")
 
-                // Generate UUIDs for existing records
+                // 3. Create new tables with sync columns (no DEFAULT clauses)
                 db.execSQL("""
-                    UPDATE books SET uuid = lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(6))),
-                    updatedAt = createdAt WHERE uuid = ''
-                """.trimIndent())
-                db.execSQL("""
-                    UPDATE pages SET uuid = lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(6))),
-                    updatedAt = (SELECT createdAt FROM books WHERE books.id = pages.bookId) WHERE uuid = ''
-                """.trimIndent())
-                db.execSQL("""
-                    UPDATE characters SET uuid = lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(2))) || '-' || lower(hex(randomblob(6))),
-                    updatedAt = createdAt WHERE uuid = ''
+                    CREATE TABLE IF NOT EXISTS books (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        uuid TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        description TEXT NOT NULL,
+                        coverImagePath TEXT,
+                        status TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL,
+                        dirty INTEGER NOT NULL,
+                        deletedAt INTEGER
+                    )
                 """.trimIndent())
 
-                // Create unique indexes on uuid
-                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_books_uuid ON books(uuid)")
-                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_pages_uuid ON pages(uuid)")
-                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_characters_uuid ON characters(uuid)")
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS pages (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        uuid TEXT NOT NULL,
+                        bookId INTEGER NOT NULL,
+                        pageNumber INTEGER NOT NULL,
+                        text TEXT NOT NULL,
+                        imagePath TEXT,
+                        imageStatus TEXT NOT NULL,
+                        updatedAt INTEGER NOT NULL,
+                        dirty INTEGER NOT NULL,
+                        deletedAt INTEGER,
+                        FOREIGN KEY(bookId) REFERENCES books(id) ON DELETE CASCADE
+                    )
+                """.trimIndent())
+
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS characters (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        uuid TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        type TEXT NOT NULL,
+                        notes TEXT NOT NULL,
+                        photoPath TEXT,
+                        createdAt INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL,
+                        dirty INTEGER NOT NULL,
+                        deletedAt INTEGER
+                    )
+                """.trimIndent())
+
+                // 4. Copy data with generated UUIDs
+                val uuidExpr = "lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(2)))||'-'||lower(hex(randomblob(6)))"
+
+                db.execSQL("""
+                    INSERT INTO books (id, uuid, title, description, coverImagePath, status, createdAt, updatedAt, dirty, deletedAt)
+                    SELECT id, $uuidExpr, title, description, coverImagePath, status, createdAt, createdAt, 1, NULL
+                    FROM temp_books
+                """.trimIndent())
+
+                db.execSQL("""
+                    INSERT INTO pages (id, uuid, bookId, pageNumber, text, imagePath, imageStatus, updatedAt, dirty, deletedAt)
+                    SELECT id, $uuidExpr, bookId, pageNumber, text, imagePath, imageStatus, COALESCE((SELECT createdAt FROM temp_books WHERE temp_books.id = temp_pages.bookId), 0), 1, NULL
+                    FROM temp_pages
+                """.trimIndent())
+
+                db.execSQL("""
+                    INSERT INTO characters (id, uuid, name, type, notes, photoPath, createdAt, updatedAt, dirty, deletedAt)
+                    SELECT id, $uuidExpr, name, type, notes, photoPath, createdAt, createdAt, 1, NULL
+                    FROM temp_characters
+                """.trimIndent())
+
+                // 5. Drop temp tables
+                db.execSQL("DROP TABLE temp_books")
+                db.execSQL("DROP TABLE temp_pages")
+                db.execSQL("DROP TABLE temp_characters")
+
+                // 6. Create indexes
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_books_uuid ON books(uuid)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_pages_bookId ON pages(bookId)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_pages_uuid ON pages(uuid)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_characters_uuid ON characters(uuid)")
             }
         }
 

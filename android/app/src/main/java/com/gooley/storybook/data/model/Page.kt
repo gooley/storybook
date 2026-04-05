@@ -16,7 +16,7 @@ import java.util.UUID
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("bookId")]
+    indices = [Index("bookId"), Index(value = ["uuid"], unique = true)]
 )
 data class Page(
     @PrimaryKey(autoGenerate = true)

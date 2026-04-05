@@ -1,10 +1,11 @@
 package com.gooley.storybook.data.model
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.util.UUID
 
-@Entity(tableName = "books")
+@Entity(tableName = "books", indices = [Index(value = ["uuid"], unique = true)])
 data class Book(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
