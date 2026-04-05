@@ -6,6 +6,9 @@ import com.gooley.storybook.data.api.OpenRouterClient
 import com.gooley.storybook.data.db.StorybookDatabase
 import com.gooley.storybook.data.model.Book
 import com.gooley.storybook.data.model.Page
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import java.io.File
 
@@ -50,38 +53,51 @@ class BookRepository(context: Context) {
             pageDao.insertAll(pages)
             onProgress("Story written! Generating illustrations...")
 
-            // Retrieve saved pages (to get auto-generated IDs)
+            // Generate page 1 first as the style reference
             val savedPages = pageDao.getPagesForBookOnce(bookId)
+            val firstPage = savedPages.first()
+            val firstImageFile = File(imagesDir, "book_${bookId}_page_${firstPage.pageNumber}.png")
 
-            // Generate illustrations for each page, passing previous image for consistency
-            var previousImageFile: File? = null
-            for ((index, page) in savedPages.withIndex()) {
-                onProgress("Drawing illustration ${index + 1} of ${savedPages.size}...")
-                val imageFile = File(imagesDir, "book_${bookId}_page_${page.pageNumber}.png")
-
-                pageDao.updateImageStatus(page.id, Page.IMAGE_GENERATING)
-                val success = apiClient.generateIllustration(page.text, title, imageFile, previousImageFile)
-
-                if (success) {
-                    pageDao.updateImage(page.id, imageFile.absolutePath, Page.IMAGE_DONE)
-                    previousImageFile = imageFile
-                } else {
-                    pageDao.updateImageStatus(page.id, Page.IMAGE_ERROR)
-                }
+            onProgress("Drawing illustration 1 of ${savedPages.size}...")
+            pageDao.updateImageStatus(firstPage.id, Page.IMAGE_GENERATING)
+            val firstSuccess = apiClient.generateIllustration(firstPage.text, title, firstImageFile, null)
+            if (firstSuccess) {
+                pageDao.updateImage(firstPage.id, firstImageFile.absolutePath, Page.IMAGE_DONE)
+            } else {
+                pageDao.updateImageStatus(firstPage.id, Page.IMAGE_ERROR)
             }
 
-            // Generate cover image using first page's illustration as reference
-            onProgress("Creating cover...")
-            val coverFile = File(imagesDir, "book_${bookId}_cover.png")
-            val firstPageImage = File(imagesDir, "book_${bookId}_page_1.png")
-            val coverSuccess = apiClient.generateIllustration(
-                "Book cover for: $description",
-                title,
-                coverFile,
-                if (firstPageImage.exists()) firstPageImage else null
-            )
-            if (coverSuccess) {
-                bookDao.updateCoverImagePath(bookId, coverFile.absolutePath)
+            // Generate remaining pages + cover in parallel, all using page 1 as reference
+            val referenceImage = if (firstSuccess) firstImageFile else null
+            val remainingPages = savedPages.drop(1)
+            onProgress("Drawing illustrations 2-${savedPages.size} in parallel...")
+
+            coroutineScope {
+                val pageJobs = remainingPages.map { page ->
+                    async {
+                        val imageFile = File(imagesDir, "book_${bookId}_page_${page.pageNumber}.png")
+                        pageDao.updateImageStatus(page.id, Page.IMAGE_GENERATING)
+                        val success = apiClient.generateIllustration(page.text, title, imageFile, referenceImage)
+                        if (success) {
+                            pageDao.updateImage(page.id, imageFile.absolutePath, Page.IMAGE_DONE)
+                        } else {
+                            pageDao.updateImageStatus(page.id, Page.IMAGE_ERROR)
+                        }
+                    }
+                }
+
+                val coverJob = async {
+                    val coverFile = File(imagesDir, "book_${bookId}_cover.png")
+                    val coverSuccess = apiClient.generateIllustration(
+                        "Book cover for: $description", title, coverFile, referenceImage
+                    )
+                    if (coverSuccess) {
+                        bookDao.updateCoverImagePath(bookId, coverFile.absolutePath)
+                    }
+                }
+
+                pageJobs.awaitAll()
+                coverJob.await()
             }
 
             bookDao.updateStatus(bookId, Book.STATUS_READY)
@@ -103,39 +119,51 @@ class BookRepository(context: Context) {
         val book = bookDao.getById(bookId) ?: return
         val pages = pageDao.getPagesForBookOnce(bookId)
 
-        var previousImageFile: File? = null
-        for ((index, page) in pages.withIndex()) {
-            val imageFile = File(imagesDir, "book_${bookId}_page_${page.pageNumber}.png")
-            if (page.imageStatus == Page.IMAGE_DONE && page.imagePath != null) {
-                previousImageFile = imageFile
-                continue
-            }
-            onProgress("Drawing illustration ${index + 1} of ${pages.size}...")
-
-            pageDao.updateImageStatus(page.id, Page.IMAGE_GENERATING)
-            val success = apiClient.generateIllustration(page.text, book.title, imageFile, previousImageFile)
-
+        // Find or generate page 1 as reference
+        val firstPage = pages.first()
+        val firstImageFile = File(imagesDir, "book_${bookId}_page_${firstPage.pageNumber}.png")
+        if (firstPage.imageStatus != Page.IMAGE_DONE || firstPage.imagePath == null) {
+            onProgress("Drawing illustration 1 of ${pages.size}...")
+            pageDao.updateImageStatus(firstPage.id, Page.IMAGE_GENERATING)
+            val success = apiClient.generateIllustration(firstPage.text, book.title, firstImageFile, null)
             if (success) {
-                pageDao.updateImage(page.id, imageFile.absolutePath, Page.IMAGE_DONE)
-                previousImageFile = imageFile
+                pageDao.updateImage(firstPage.id, firstImageFile.absolutePath, Page.IMAGE_DONE)
             } else {
-                pageDao.updateImageStatus(page.id, Page.IMAGE_ERROR)
+                pageDao.updateImageStatus(firstPage.id, Page.IMAGE_ERROR)
             }
         }
 
-        // Cover too if missing
-        if (book.coverImagePath == null) {
-            onProgress("Creating cover...")
-            val coverFile = File(imagesDir, "book_${bookId}_cover.png")
-            val firstPageImage = File(imagesDir, "book_${bookId}_page_1.png")
-            val success = apiClient.generateIllustration(
-                "Book cover for: ${book.description}",
-                book.title,
-                coverFile,
-                if (firstPageImage.exists()) firstPageImage else null
-            )
-            if (success) {
-                bookDao.updateCoverImagePath(bookId, coverFile.absolutePath)
+        val referenceImage = if (firstImageFile.exists()) firstImageFile else null
+        val remaining = pages.drop(1).filter { it.imageStatus != Page.IMAGE_DONE || it.imagePath == null }
+        val needsCover = book.coverImagePath == null
+
+        if (remaining.isNotEmpty() || needsCover) {
+            onProgress("Drawing ${remaining.size} illustrations in parallel...")
+            coroutineScope {
+                val pageJobs = remaining.map { page ->
+                    async {
+                        val imageFile = File(imagesDir, "book_${bookId}_page_${page.pageNumber}.png")
+                        pageDao.updateImageStatus(page.id, Page.IMAGE_GENERATING)
+                        val success = apiClient.generateIllustration(page.text, book.title, imageFile, referenceImage)
+                        if (success) {
+                            pageDao.updateImage(page.id, imageFile.absolutePath, Page.IMAGE_DONE)
+                        } else {
+                            pageDao.updateImageStatus(page.id, Page.IMAGE_ERROR)
+                        }
+                    }
+                }
+
+                if (needsCover) {
+                    async {
+                        val coverFile = File(imagesDir, "book_${bookId}_cover.png")
+                        val success = apiClient.generateIllustration(
+                            "Book cover for: ${book.description}", book.title, coverFile, referenceImage
+                        )
+                        if (success) bookDao.updateCoverImagePath(bookId, coverFile.absolutePath)
+                    }
+                }
+
+                pageJobs.awaitAll()
             }
         }
         onProgress("Done!")
