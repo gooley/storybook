@@ -117,7 +117,7 @@ class SyncManager(
                 }
             } else if (sc.deletedAt == null) {
                 // New character from server
-                val localId = characterDao.upsert(Character(
+                val localId = characterDao.insert(Character(
                     uuid = sc.id,
                     name = sc.name,
                     type = sc.type,
@@ -150,7 +150,7 @@ class SyncManager(
                     }
                 }
             } else if (sb.deletedAt == null) {
-                val localId = bookDao.upsert(Book(
+                val localId = bookDao.insert(Book(
                     uuid = sb.id,
                     title = sb.title,
                     description = sb.description,
@@ -184,7 +184,7 @@ class SyncManager(
                     }
                 }
             } else if (sp.deletedAt == null) {
-                val localId = pageDao.upsert(Page(
+                val localId = pageDao.insert(Page(
                     uuid = sp.id,
                     bookId = bookLocalId,
                     pageNumber = sp.pageNumber,
@@ -209,7 +209,7 @@ class SyncManager(
         if (client.downloadFile(client.getCharacterPhotoUrl(uuid), destFile)) {
             val char = characterDao.getByUuid(uuid)
             if (char != null) {
-                characterDao.upsert(char.copy(photoPath = destFile.absolutePath, dirty = false))
+                characterDao.update(char.copy(photoPath = destFile.absolutePath, dirty = false))
             }
         }
     }
@@ -229,7 +229,7 @@ class SyncManager(
         if (client.downloadFile(client.getPageImageUrl(pageUuid), destFile)) {
             val page = pageDao.getByUuid(pageUuid)
             if (page != null) {
-                pageDao.upsert(page.copy(
+                pageDao.update(page.copy(
                     imagePath = destFile.absolutePath,
                     imageStatus = Page.IMAGE_DONE,
                     dirty = false

@@ -2,8 +2,8 @@ package com.gooley.storybook.data.db
 
 import androidx.room.Dao
 import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import com.gooley.storybook.data.model.Page
 import kotlinx.coroutines.flow.Flow
 
@@ -14,6 +14,9 @@ interface PageDao {
 
     @Insert
     suspend fun insertAll(pages: List<Page>)
+
+    @Update
+    suspend fun update(page: Page)
 
     @Query("SELECT * FROM pages WHERE bookId = :bookId AND deletedAt IS NULL ORDER BY pageNumber")
     fun getPagesForBook(bookId: Long): Flow<List<Page>>
@@ -40,6 +43,6 @@ interface PageDao {
     @Query("UPDATE pages SET dirty = 0 WHERE uuid = :uuid")
     suspend fun markSynced(uuid: String)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(page: Page): Long
+    @Update
+    suspend fun upsert(page: Page): Int
 }

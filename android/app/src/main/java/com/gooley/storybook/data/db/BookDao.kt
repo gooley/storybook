@@ -2,7 +2,6 @@ package com.gooley.storybook.data.db
 
 import androidx.room.Dao
 import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.gooley.storybook.data.model.Book
@@ -47,6 +46,6 @@ interface BookDao {
     @Query("UPDATE books SET dirty = 0 WHERE uuid = :uuid")
     suspend fun markSynced(uuid: String)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(book: Book): Long
+    @Update
+    suspend fun upsert(book: Book): Int
 }
