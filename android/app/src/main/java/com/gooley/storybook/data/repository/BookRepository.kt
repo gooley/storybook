@@ -95,13 +95,13 @@ class BookRepository(private val context: Context) {
         // Load characters and build references
         val characterRefs = buildCharacterRefs(selectedCharacterIds)
 
-        // Build enriched description for story text generation (names only, no descriptions)
+        // Build enriched description for story text generation (descriptions for context, not for narration)
         val enrichedDescription = buildString {
             append(description)
             if (characterRefs.isNotEmpty()) {
-                append("\n\nCharacters to feature in the story (by name only):")
+                append("\n\nCharacters to feature in the story:")
                 characterRefs.forEach { c ->
-                    append("\n- ${c.name}")
+                    append("\n- ${c.name} (${c.description})")
                 }
             }
         }
