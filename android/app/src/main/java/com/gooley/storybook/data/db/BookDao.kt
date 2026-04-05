@@ -18,6 +18,9 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE deletedAt IS NULL ORDER BY createdAt DESC")
     fun getAll(): Flow<List<Book>>
 
+    @Query("SELECT * FROM books WHERE deletedAt IS NULL AND status = 'ready' ORDER BY createdAt DESC")
+    suspend fun getAllReady(): List<Book>
+
     @Query("SELECT * FROM books WHERE id = :id AND deletedAt IS NULL")
     suspend fun getById(id: Long): Book?
 

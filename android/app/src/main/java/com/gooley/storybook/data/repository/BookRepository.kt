@@ -162,8 +162,8 @@ class BookRepository(private val context: Context) {
 
                 val coverJob = async {
                     val coverFile = File(imagesDir, "book_${bookId}_cover.png")
-                    val coverSuccess = apiClient.generateIllustration(
-                        "Book cover for: $description", storyResponse.title, coverFile, referenceImage, characterRefs
+                    val coverSuccess = apiClient.generateCover(
+                        storyResponse.title, referenceImage ?: firstImageFile, coverFile
                     )
                     if (coverSuccess) {
                         bookDao.updateCoverImagePath(bookId, coverFile.absolutePath)
@@ -231,16 +231,56 @@ class BookRepository(private val context: Context) {
                 if (needsCover) {
                     async {
                         val coverFile = File(imagesDir, "book_${bookId}_cover.png")
-                        val success = apiClient.generateIllustration(
-                            "Book cover for: ${book.description}", book.title, coverFile, referenceImage
-                        )
-                        if (success) bookDao.updateCoverImagePath(bookId, coverFile.absolutePath)
+                        val firstPageImage = pages.first().imagePath?.let { File(it) }
+                        if (firstPageImage != null && firstPageImage.exists()) {
+                            val success = apiClient.generateCover(book.title, firstPageImage, coverFile)
+                            if (success) bookDao.updateCoverImagePath(bookId, coverFile.absolutePath)
+                        }
                     }
                 }
 
                 pageJobs.awaitAll()
             }
         }
+        onProgress("Done!")
+    }
+
+    suspend fun regenerateCovers(
+        onProgress: (String) -> Unit
+    ) {
+        val books = bookDao.getAllReady()
+        onProgress("Regenerating covers for ${books.size} books...")
+
+        coroutineScope {
+            val jobs = books.map { book ->
+                async {
+                    try {
+                        val pages = pageDao.getPagesForBookOnce(book.id)
+                        val firstPage = pages.firstOrNull() ?: return@async
+                        val firstPageFile = firstPage.imagePath?.let { File(it) }
+                        if (firstPageFile == null || !firstPageFile.exists()) {
+                            Log.w(TAG, "Skipping cover regen for '${book.title}': no page 1 image")
+                            return@async
+                        }
+
+                        val coverFile = File(imagesDir, "book_${book.id}_cover.png")
+                        val success = apiClient.generateCover(book.title, firstPageFile, coverFile)
+                        if (success) {
+                            bookDao.updateCoverImagePath(book.id, coverFile.absolutePath)
+                            Log.d(TAG, "Regenerated cover for '${book.title}'")
+                        } else {
+                            Log.w(TAG, "Failed to regenerate cover for '${book.title}'")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error regenerating cover for '${book.title}'", e)
+                    }
+                }
+            }
+            jobs.awaitAll()
+        }
+
+        onProgress("Cover regeneration complete! Syncing...")
+        SyncWorker.syncNow(context)
         onProgress("Done!")
     }
 

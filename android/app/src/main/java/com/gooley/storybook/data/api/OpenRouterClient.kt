@@ -33,6 +33,7 @@ class OpenRouterClient {
     private val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
+        explicitNulls = false
     }
 
     private val apiKey = BuildConfig.OPENROUTER_API_KEY
@@ -100,6 +101,81 @@ class OpenRouterClient {
 
             parseStoryResponse(content)
         }
+
+    suspend fun generateCover(
+        title: String,
+        firstPageImageFile: File,
+        outputFile: File
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val prompt = buildString {
+                append("Use this image as the basis for generating a book cover ")
+                append("with the title \"$title\". You have artistic license to be ")
+                append("creative with typography but keep the same basic content concepts. ")
+                append("Ratio should be 3:2 portrait orientation.")
+            }
+
+            // Build content with text first, then reference image
+            val parts = mutableListOf<JsonObject>()
+            parts.add(JsonObject(mapOf(
+                "type" to JsonPrimitive("text"),
+                "text" to JsonPrimitive(prompt)
+            )))
+            if (firstPageImageFile.exists()) {
+                val bytes = firstPageImageFile.readBytes()
+                val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                val mimeType = if (firstPageImageFile.extension == "png") "image/png" else "image/jpeg"
+                parts.add(JsonObject(mapOf(
+                    "type" to JsonPrimitive("image_url"),
+                    "image_url" to JsonObject(mapOf(
+                        "url" to JsonPrimitive("data:$mimeType;base64,$b64")
+                    ))
+                )))
+            }
+            val content = JsonArray(parts)
+
+            val request = ChatRequest(
+                model = "bytedance-seed/seedream-4.5",
+                messages = listOf(
+                    ChatMessage(role = "user", content = content)
+                ),
+                maxTokens = 4096,
+                modalities = listOf("image")
+            )
+
+            val body = json.encodeToString(request)
+            Log.d(TAG, "Cover gen request for: $title")
+
+            val httpRequest = Request.Builder()
+                .url(baseUrl)
+                .addHeader("Authorization", "Bearer $apiKey")
+                .addHeader("Content-Type", "application/json")
+                .post(body.toRequestBody("application/json".toMediaType()))
+                .build()
+
+            val response = client.newCall(httpRequest).execute()
+            val responseBody = response.body?.string() ?: throw Exception("Empty response")
+
+            if (!response.isSuccessful) {
+                Log.e(TAG, "Cover gen failed: ${response.code} - $responseBody")
+                return@withContext false
+            }
+
+            val imageData = extractImageData(responseBody)
+            if (imageData != null) {
+                val bytes = Base64.decode(imageData, Base64.DEFAULT)
+                outputFile.writeBytes(bytes)
+                Log.d(TAG, "Saved cover to ${outputFile.absolutePath}")
+                true
+            } else {
+                Log.w(TAG, "No image data in cover response")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Cover generation error", e)
+            false
+        }
+    }
 
     suspend fun generateIllustration(
         pageText: String,

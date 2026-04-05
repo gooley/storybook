@@ -28,19 +28,16 @@ export function Books() {
       ) : (
         <div className="card-grid">
           {books.map((book) => (
-            <div key={book.id} className="card" onClick={() => navigate(`/reader/${book.id}`)}>
-              <div className="card-image">
-                {book.cover_image_path ? (
-                  <img src={getBookCoverUrl(book.id)} alt={book.title}
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                ) : "📖"}
-              </div>
-              <div className="card-body">
-                <h3>{book.title}</h3>
-                {book.description && (
-                  <p>{book.description.length > 80 ? book.description.slice(0, 80) + "…" : book.description}</p>
-                )}
-              </div>
+            <div key={book.id} className="book-cover" onClick={() => navigate(`/reader/${book.id}`)}>
+              {book.cover_image_path ? (
+                <img src={getBookCoverUrl(book.id)} alt={book.title}
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+              ) : (
+                <div className="book-cover-fallback">
+                  <span className="emoji">📖</span>
+                  <span className="fallback-title">{book.title}</span>
+                </div>
+              )}
             </div>
           ))}
         </div>
