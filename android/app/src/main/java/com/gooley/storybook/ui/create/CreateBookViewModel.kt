@@ -58,25 +58,12 @@ class CreateBookViewModel(
 
         _uiState.value = state.copy(isGenerating = true, error = null)
 
-        // Build enriched description with selected characters
-        val selectedChars = state.availableCharacters.filter { it.id in state.selectedCharacterIds }
-        val enrichedDescription = buildString {
-            append(state.description)
-            if (selectedChars.isNotEmpty()) {
-                append("\n\nCharacters to feature in the story:")
-                selectedChars.forEach { c ->
-                    val typeLabel = if (c.type == Character.TYPE_FAMILY) "family member" else "friend"
-                    append("\n- ${c.name} ($typeLabel)")
-                    if (c.notes.isNotBlank()) append(": ${c.notes}")
-                }
-            }
-        }
-
         viewModelScope.launch {
             try {
                 val bookId = repository.generateBook(
                     title = state.title,
-                    description = enrichedDescription,
+                    description = state.description,
+                    selectedCharacterIds = state.selectedCharacterIds,
                     onProgress = { progress ->
                         _uiState.value = _uiState.value.copy(progress = progress)
                     }

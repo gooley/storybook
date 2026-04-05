@@ -1,7 +1,10 @@
 package com.gooley.storybook.data.repository
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.util.Log
+import com.gooley.storybook.data.api.CharacterRef
 import com.gooley.storybook.data.api.OpenRouterClient
 import com.gooley.storybook.data.db.StorybookDatabase
 import com.gooley.storybook.data.model.Book
@@ -16,8 +19,10 @@ class BookRepository(context: Context) {
     private val db = StorybookDatabase.getInstance(context)
     private val bookDao = db.bookDao()
     private val pageDao = db.pageDao()
+    private val characterDao = db.characterDao()
     private val apiClient = OpenRouterClient()
     private val imagesDir = File(context.filesDir, "illustrations").also { it.mkdirs() }
+    private val scaledPhotosDir = File(context.cacheDir, "scaled_photos").also { it.mkdirs() }
 
     fun getAllBooks(): Flow<List<Book>> = bookDao.getAll()
 
@@ -27,11 +32,78 @@ class BookRepository(context: Context) {
 
     suspend fun deleteBook(book: Book) = bookDao.softDelete(book.id)
 
+    /**
+     * Scales a photo to max 512px on the longest edge, saves to cache dir.
+     * Returns the scaled file, or null if the original doesn't exist.
+     */
+    private fun scalePhoto(originalPath: String, id: String): File? {
+        val original = File(originalPath)
+        if (!original.exists()) return null
+
+        return try {
+            val bitmap = BitmapFactory.decodeFile(original.absolutePath) ?: return null
+            val maxDim = 512
+            val scale = maxDim.toFloat() / maxOf(bitmap.width, bitmap.height)
+            val scaled = if (scale < 1f) {
+                Bitmap.createScaledBitmap(
+                    bitmap,
+                    (bitmap.width * scale).toInt(),
+                    (bitmap.height * scale).toInt(),
+                    true
+                )
+            } else {
+                bitmap
+            }
+
+            val outFile = File(scaledPhotosDir, "ref_$id.jpg")
+            outFile.outputStream().use { scaled.compress(Bitmap.CompressFormat.JPEG, 80, it) }
+            if (scaled !== bitmap) scaled.recycle()
+            bitmap.recycle()
+            outFile
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to scale photo: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Load selected characters and build CharacterRef list with scaled photos.
+     */
+    private suspend fun buildCharacterRefs(selectedCharacterIds: Set<Long>): List<CharacterRef> {
+        if (selectedCharacterIds.isEmpty()) return emptyList()
+        return selectedCharacterIds.mapNotNull { id ->
+            characterDao.getById(id)?.let { c ->
+                val description = buildString {
+                    val typeLabel = if (c.type == "family") "family member" else "friend"
+                    append("$typeLabel")
+                    if (c.notes.isNotBlank()) append(". ${c.notes}")
+                }
+                val scaledPhoto = c.photoPath?.let { scalePhoto(it, c.uuid) }
+                CharacterRef(name = c.name, description = description, photoFile = scaledPhoto)
+            }
+        }
+    }
+
     suspend fun generateBook(
         title: String,
         description: String,
+        selectedCharacterIds: Set<Long> = emptySet(),
         onProgress: (String) -> Unit
     ): Long {
+        // Load characters and build references
+        val characterRefs = buildCharacterRefs(selectedCharacterIds)
+
+        // Build enriched description for story text generation
+        val enrichedDescription = buildString {
+            append(description)
+            if (characterRefs.isNotEmpty()) {
+                append("\n\nCharacters to feature in the story:")
+                characterRefs.forEach { c ->
+                    append("\n- ${c.name} (${c.description})")
+                }
+            }
+        }
+
         // Create book entry
         onProgress("Creating book...")
         val book = Book(title = title, description = description)
@@ -40,7 +112,7 @@ class BookRepository(context: Context) {
         try {
             // Generate story text
             onProgress("Writing story with AI...")
-            val storyPages = apiClient.generateStory(title, description)
+            val storyPages = apiClient.generateStory(title, enrichedDescription)
 
             // Save pages to DB
             val pages = storyPages.map { sp ->
@@ -60,7 +132,7 @@ class BookRepository(context: Context) {
 
             onProgress("Drawing illustration 1 of ${savedPages.size}...")
             pageDao.updateImageStatus(firstPage.id, Page.IMAGE_GENERATING)
-            val firstSuccess = apiClient.generateIllustration(firstPage.text, title, firstImageFile, null)
+            val firstSuccess = apiClient.generateIllustration(firstPage.text, title, firstImageFile, null, characterRefs)
             if (firstSuccess) {
                 pageDao.updateImage(firstPage.id, firstImageFile.absolutePath, Page.IMAGE_DONE)
             } else {
@@ -77,7 +149,7 @@ class BookRepository(context: Context) {
                     async {
                         val imageFile = File(imagesDir, "book_${bookId}_page_${page.pageNumber}.png")
                         pageDao.updateImageStatus(page.id, Page.IMAGE_GENERATING)
-                        val success = apiClient.generateIllustration(page.text, title, imageFile, referenceImage)
+                        val success = apiClient.generateIllustration(page.text, title, imageFile, referenceImage, characterRefs)
                         if (success) {
                             pageDao.updateImage(page.id, imageFile.absolutePath, Page.IMAGE_DONE)
                         } else {
@@ -89,7 +161,7 @@ class BookRepository(context: Context) {
                 val coverJob = async {
                     val coverFile = File(imagesDir, "book_${bookId}_cover.png")
                     val coverSuccess = apiClient.generateIllustration(
-                        "Book cover for: $description", title, coverFile, referenceImage
+                        "Book cover for: $description", title, coverFile, referenceImage, characterRefs
                     )
                     if (coverSuccess) {
                         bookDao.updateCoverImagePath(bookId, coverFile.absolutePath)

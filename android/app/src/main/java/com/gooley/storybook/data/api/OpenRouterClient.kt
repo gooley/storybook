@@ -17,6 +17,12 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.util.concurrent.TimeUnit
 
+data class CharacterRef(
+    val name: String,
+    val description: String,
+    val photoFile: File? = null
+)
+
 class OpenRouterClient {
     private val client = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
@@ -34,18 +40,21 @@ class OpenRouterClient {
 
     private fun textContent(text: String) = JsonPrimitive(text)
 
-    private fun multimodalContent(text: String, imageFile: File? = null): JsonArray {
+    private fun multimodalContent(text: String, imageFiles: List<File> = emptyList()): JsonArray {
         val parts = mutableListOf<JsonObject>()
 
-        if (imageFile != null && imageFile.exists()) {
-            val bytes = imageFile.readBytes()
-            val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-            parts.add(JsonObject(mapOf(
-                "type" to JsonPrimitive("image_url"),
-                "image_url" to JsonObject(mapOf(
-                    "url" to JsonPrimitive("data:image/png;base64,$b64")
-                ))
-            )))
+        for (imageFile in imageFiles) {
+            if (imageFile.exists()) {
+                val bytes = imageFile.readBytes()
+                val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                val mimeType = if (imageFile.extension == "png") "image/png" else "image/jpeg"
+                parts.add(JsonObject(mapOf(
+                    "type" to JsonPrimitive("image_url"),
+                    "image_url" to JsonObject(mapOf(
+                        "url" to JsonPrimitive("data:$mimeType;base64,$b64")
+                    ))
+                )))
+            }
         }
 
         parts.add(JsonObject(mapOf(
@@ -95,13 +104,28 @@ class OpenRouterClient {
         pageText: String,
         bookTitle: String,
         outputFile: File,
-        previousImageFile: File? = null
+        previousImageFile: File? = null,
+        characters: List<CharacterRef> = emptyList()
     ): Boolean = withContext(Dispatchers.IO) {
         try {
             val prompt = buildString {
                 append("Generate an illustration for a children's storybook page.\n\n")
                 append("Book title: \"$bookTitle\"\n")
                 append("Page text: \"$pageText\"\n\n")
+
+                if (characters.isNotEmpty()) {
+                    append("Characters in this story (reference photos attached where available):\n")
+                    characters.forEachIndexed { i, c ->
+                        append("- ${c.name}: ${c.description}")
+                        if (c.photoFile?.exists() == true) {
+                            append(" [see reference photo ${i + 1}]")
+                        }
+                        append("\n")
+                    }
+                    append("\nDraw these characters to resemble their reference photos — ")
+                    append("capture their key features, coloring, and proportions in the illustration style.\n\n")
+                }
+
                 if (previousImageFile != null && previousImageFile.exists()) {
                     append("I've attached the previous page's illustration. ")
                     append("Keep a consistent art style, color palette, and character designs.\n\n")
@@ -112,11 +136,16 @@ class OpenRouterClient {
                 append("IMPORTANT: Do NOT include any text, words, letters, numbers, captions, titles, labels, or writing of any kind in the image. The image must contain only visual artwork with zero text.")
             }
 
-            val content = if (previousImageFile != null && previousImageFile.exists()) {
-                multimodalContent(prompt, previousImageFile)
-            } else {
-                multimodalContent(prompt)
+            // Build image attachments: character photos first, then previous page
+            val imageFiles = mutableListOf<File>()
+            characters.forEach { c ->
+                c.photoFile?.let { if (it.exists()) imageFiles.add(it) }
             }
+            if (previousImageFile != null && previousImageFile.exists()) {
+                imageFiles.add(previousImageFile)
+            }
+
+            val content = multimodalContent(prompt, imageFiles)
 
             val request = ChatRequest(
                 model = "google/gemini-3.1-flash-image-preview",
