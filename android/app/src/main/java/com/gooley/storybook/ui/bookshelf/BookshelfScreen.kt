@@ -29,7 +29,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -103,49 +102,37 @@ private fun BookCard(book: Book, onClick: () -> Unit) {
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column {
-            // Cover image or placeholder
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(0.75f)
-                    .clip(MaterialTheme.shapes.medium),
-                contentAlignment = Alignment.Center
-            ) {
-                if (book.coverImagePath != null) {
-                    AsyncImage(
-                        model = book.coverImagePath,
-                        contentDescription = book.title,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("📖", fontSize = 48.sp)
-                    }
-                }
-
-                // Status badge
-                if (book.status == Book.STATUS_GENERATING) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.padding(8.dp),
-                        color = MaterialTheme.colorScheme.primary
-                    )
+        // Cover image or placeholder
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(0.75f)
+                .clip(MaterialTheme.shapes.medium),
+            contentAlignment = Alignment.Center
+        ) {
+            if (book.coverImagePath != null) {
+                AsyncImage(
+                    model = book.coverImagePath,
+                    contentDescription = book.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("📖", fontSize = 48.sp)
                 }
             }
 
-            // Title
-            Text(
-                text = book.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-            )
+            // Status badge
+            if (book.status == Book.STATUS_GENERATING) {
+                CircularProgressIndicator(
+                    modifier = Modifier.padding(8.dp),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
         }
     }
 }
