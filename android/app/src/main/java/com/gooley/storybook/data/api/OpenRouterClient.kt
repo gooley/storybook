@@ -65,7 +65,7 @@ class OpenRouterClient {
         return JsonArray(parts)
     }
 
-    suspend fun generateStory(title: String, description: String, pageCount: Int = 4): List<StoryPage> =
+    suspend fun generateStory(description: String, pageCount: Int = 4): StoryResponse =
         withContext(Dispatchers.IO) {
             val systemPrompt = """
                 You are a children's storybook author. Write a short, engaging story for young children (ages 3-7).
@@ -78,13 +78,13 @@ class OpenRouterClient {
                 - Include descriptive scenes that would make good illustrations
                 - Do NOT describe characters' physical appearances in the text (e.g. don't say "Dana, a 3 year old with curly blonde hair"). The reader already knows the characters — just use their names naturally.
                 
-                Format your response as a JSON array of objects with "pageNumber" and "text" fields.
-                Example: [{"pageNumber": 1, "text": "Once upon a time..."}, {"pageNumber": 2, "text": "The next thing..."}]
+                Format your response as a JSON object with a "title" field and a "pages" array.
+                Example: {"title": "The Brave Little Fox", "pages": [{"pageNumber": 1, "text": "Once upon a time..."}, {"pageNumber": 2, "text": "The next thing..."}]}
                 
-                Return ONLY the JSON array, no other text.
+                Return ONLY the JSON object, no other text.
             """.trimIndent()
 
-            val userPrompt = "Write a children's story called \"$title\". Here's the idea: $description"
+            val userPrompt = "Write a children's story based on this idea: $description"
 
             val request = ChatRequest(
                 model = "anthropic/claude-sonnet-4.6",
@@ -98,7 +98,7 @@ class OpenRouterClient {
             val content = response.choices.firstOrNull()?.message?.content
                 ?: throw Exception("No response from LLM")
 
-            parseStoryPages(content)
+            parseStoryResponse(content)
         }
 
     suspend fun generateIllustration(
@@ -249,25 +249,24 @@ class OpenRouterClient {
         return json.decodeFromString<ChatResponse>(responseBody)
     }
 
-    private fun parseStoryPages(content: String): List<StoryPage> {
+    private fun parseStoryResponse(content: String): StoryResponse {
         Log.d(TAG, "Raw story response (${content.length} chars): ${content.take(500)}")
 
-        // Strip markdown code fences
         var jsonStr = content
             .replace(Regex("```json\\s*"), "")
             .replace(Regex("```\\s*"), "")
             .trim()
 
-        // If there's text before the JSON array, extract just the array
-        val arrayStart = jsonStr.indexOf('[')
-        val arrayEnd = jsonStr.lastIndexOf(']')
-        if (arrayStart >= 0 && arrayEnd > arrayStart) {
-            jsonStr = jsonStr.substring(arrayStart, arrayEnd + 1)
+        // Extract JSON object
+        val objStart = jsonStr.indexOf('{')
+        val objEnd = jsonStr.lastIndexOf('}')
+        if (objStart >= 0 && objEnd > objStart) {
+            jsonStr = jsonStr.substring(objStart, objEnd + 1)
         }
 
-        val pages = json.decodeFromString<List<StoryPage>>(jsonStr)
-        Log.d(TAG, "Parsed ${pages.size} story pages")
-        return pages
+        val response = json.decodeFromString<StoryResponse>(jsonStr)
+        Log.d(TAG, "Parsed story: title='${response.title}', ${response.pages.size} pages")
+        return response
     }
 
     // Helper extensions for kotlinx JsonElement
@@ -280,6 +279,12 @@ class OpenRouterClient {
         private const val TAG = "OpenRouterClient"
     }
 }
+
+@kotlinx.serialization.Serializable
+data class StoryResponse(
+    val title: String,
+    val pages: List<StoryPage>
+)
 
 @kotlinx.serialization.Serializable
 data class StoryPage(

@@ -12,11 +12,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 data class CreateBookUiState(
-    val title: String = "",
     val description: String = "",
     val pageCount: Int = 4,
     val isGenerating: Boolean = false,
     val progress: String = "",
+    val progressFraction: Float = 0f,
+    val firstIllustrationPath: String? = null,
     val error: String? = null,
     val createdBookId: Long? = null,
     val availableCharacters: List<Character> = emptyList(),
@@ -37,10 +38,6 @@ class CreateBookViewModel(
         }
     }
 
-    fun updateTitle(title: String) {
-        _uiState.value = _uiState.value.copy(title = title)
-    }
-
     fun updateDescription(description: String) {
         _uiState.value = _uiState.value.copy(description = description)
     }
@@ -58,20 +55,28 @@ class CreateBookViewModel(
 
     fun generateBook() {
         val state = _uiState.value
-        if (state.title.isBlank() || state.description.isBlank()) return
+        if (state.description.isBlank()) return
         if (state.isGenerating) return
 
-        _uiState.value = state.copy(isGenerating = true, error = null)
+        _uiState.value = state.copy(isGenerating = true, error = null, firstIllustrationPath = null)
 
         viewModelScope.launch {
             try {
+                val totalSteps = state.pageCount + 2 // story + first illus + remaining + cover
+                var currentStep = 0
                 val bookId = repository.generateBook(
-                    title = state.title,
                     description = state.description,
                     pageCount = state.pageCount,
                     selectedCharacterIds = state.selectedCharacterIds,
                     onProgress = { progress ->
-                        _uiState.value = _uiState.value.copy(progress = progress)
+                        currentStep++
+                        _uiState.value = _uiState.value.copy(
+                            progress = progress,
+                            progressFraction = (currentStep.toFloat() / totalSteps).coerceIn(0f, 1f)
+                        )
+                    },
+                    onFirstIllustration = { path ->
+                        _uiState.value = _uiState.value.copy(firstIllustrationPath = path)
                     }
                 )
                 _uiState.value = _uiState.value.copy(

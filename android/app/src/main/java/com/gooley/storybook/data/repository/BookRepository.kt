@@ -86,11 +86,11 @@ class BookRepository(private val context: Context) {
     }
 
     suspend fun generateBook(
-        title: String,
         description: String,
         pageCount: Int = 4,
         selectedCharacterIds: Set<Long> = emptySet(),
-        onProgress: (String) -> Unit
+        onProgress: (String) -> Unit,
+        onFirstIllustration: ((String) -> Unit)? = null
     ): Long {
         // Load characters and build references
         val characterRefs = buildCharacterRefs(selectedCharacterIds)
@@ -106,18 +106,17 @@ class BookRepository(private val context: Context) {
             }
         }
 
-        // Create book entry
-        onProgress("Creating book...")
-        val book = Book(title = title, description = description)
+        // Generate story text (includes title)
+        onProgress("Writing story with AI...")
+        val storyResponse = apiClient.generateStory(enrichedDescription, pageCount)
+
+        // Create book entry with generated title
+        val book = Book(title = storyResponse.title, description = description)
         val bookId = bookDao.insert(book)
 
         try {
-            // Generate story text
-            onProgress("Writing story with AI...")
-            val storyPages = apiClient.generateStory(title, enrichedDescription, pageCount)
-
             // Save pages to DB
-            val pages = storyPages.map { sp ->
+            val pages = storyResponse.pages.map { sp ->
                 Page(
                     bookId = bookId,
                     pageNumber = sp.pageNumber,
@@ -134,9 +133,10 @@ class BookRepository(private val context: Context) {
 
             onProgress("Drawing illustration 1 of ${savedPages.size}...")
             pageDao.updateImageStatus(firstPage.id, Page.IMAGE_GENERATING)
-            val firstSuccess = apiClient.generateIllustration(firstPage.text, title, firstImageFile, null, characterRefs)
+            val firstSuccess = apiClient.generateIllustration(firstPage.text, storyResponse.title, firstImageFile, null, characterRefs)
             if (firstSuccess) {
                 pageDao.updateImage(firstPage.id, firstImageFile.absolutePath, Page.IMAGE_DONE)
+                onFirstIllustration?.invoke(firstImageFile.absolutePath)
             } else {
                 pageDao.updateImageStatus(firstPage.id, Page.IMAGE_ERROR)
             }
@@ -151,7 +151,7 @@ class BookRepository(private val context: Context) {
                     async {
                         val imageFile = File(imagesDir, "book_${bookId}_page_${page.pageNumber}.png")
                         pageDao.updateImageStatus(page.id, Page.IMAGE_GENERATING)
-                        val success = apiClient.generateIllustration(page.text, title, imageFile, referenceImage, characterRefs)
+                        val success = apiClient.generateIllustration(page.text, storyResponse.title, imageFile, referenceImage, characterRefs)
                         if (success) {
                             pageDao.updateImage(page.id, imageFile.absolutePath, Page.IMAGE_DONE)
                         } else {
@@ -163,7 +163,7 @@ class BookRepository(private val context: Context) {
                 val coverJob = async {
                     val coverFile = File(imagesDir, "book_${bookId}_cover.png")
                     val coverSuccess = apiClient.generateIllustration(
-                        "Book cover for: $description", title, coverFile, referenceImage, characterRefs
+                        "Book cover for: $description", storyResponse.title, coverFile, referenceImage, characterRefs
                     )
                     if (coverSuccess) {
                         bookDao.updateCoverImagePath(bookId, coverFile.absolutePath)
