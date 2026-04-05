@@ -1,67 +1,36 @@
 # Storybook
 
-A simple Android app for telling stories to kids, designed for a 6" color e-ink tablet.
+A personalized children's storybook generator. Uses AI to create illustrated stories featuring your family and friends. Designed for a 6" color e-ink tablet, with a web companion for managing characters and browsing stories.
 
-## Tech Stack
+## Architecture
 
-- **Language**: Kotlin
-- **UI**: Jetpack Compose with Material 3
-- **Min SDK**: 30 (Android 11)
-- **Target SDK**: 35
-- **Build**: Gradle 8.11.1 with Kotlin DSL
+```
+├── android/     # Kotlin/Compose Android app (local-first, syncs to server)
+├── server/      # Node.js/Express API (SQLite, image storage)
+└── web/         # React SPA (character management, story browser)
+```
 
-## Prerequisites
+Deployed on gool3yhost at `storybook.gool3y.com`.
 
-- [Android Studio](https://developer.android.com/studio) (provides JBR and SDK)
-- Android SDK Platform 35
-- Android SDK Build-Tools 35
+## Android App
 
-## Setup
-
-1. Clone the repo
-2. Open in Android Studio, or build from the command line (see below)
-3. The SDK path is configured via `local.properties` (not checked in) — create one if needed:
-   ```
-   sdk.dir=/Users/<you>/Library/Android/sdk
-   ```
-
-## Build
+See [android/README.md](android/README.md) for build/install instructions.
 
 ```bash
+cd android
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 ./gradlew assembleDebug
 ```
 
-The debug APK is output to `app/build/outputs/apk/debug/app-debug.apk`.
+## Server + Web
 
-## Install & Run
-
-**On emulator:**
 ```bash
-adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-debug.apk
-adb -s emulator-5554 shell am start -n com.gooley.storybook/.MainActivity
+cd server && npm install && npm run dev    # API on :3000
+cd web && npm install && npm run dev       # Dev server on :5173
 ```
 
-**On physical device (HiBreak e-ink tablet):**
+## Deploy
+
 ```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n com.gooley.storybook/.MainActivity
-```
-
-## Project Structure
-
-```
-├── settings.gradle.kts          # Project settings & repositories
-├── build.gradle.kts             # Root build config & plugin versions
-├── gradle.properties            # Gradle/Android build properties
-└── app/
-    ├── build.gradle.kts         # App module: dependencies, SDK versions
-    └── src/main/
-        ├── AndroidManifest.xml
-        ├── java/com/gooley/storybook/
-        │   ├── MainActivity.kt          # Main Compose activity
-        │   └── ui/theme/Theme.kt        # Material 3 color theme
-        └── res/values/
-            ├── strings.xml
-            └── themes.xml
+gool3yhost app deploy
 ```

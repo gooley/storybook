@@ -13,3 +13,13 @@ local.properties
 # OS
 .DS_Store
 Thumbs.db
+
+# Node.js
+node_modules/
+dist/
+
+# Server runtime data (local dev)
+server/data/
+
+# Kotlin build caches
+.kotlin/
