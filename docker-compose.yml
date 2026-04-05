@@ -1,0 +1,23 @@
+services:
+  app:
+    image: ${ECR_URI}:storybook-${IMAGE_TAG}
+    restart: unless-stopped
+    environment:
+      - API_KEY=${API_KEY}
+      - NODE_ENV=production
+      - DATA_DIR=/app/data
+    volumes:
+      - storybook-data:/app/data
+    networks:
+      - gool3yhost
+    labels:
+      - traefik.enable=true
+      - "traefik.http.routers.storybook.rule=Host(`storybook.gool3y.com`)"
+      - traefik.http.services.storybook.loadbalancer.server.port=3000
+
+volumes:
+  storybook-data:
+
+networks:
+  gool3yhost:
+    external: true

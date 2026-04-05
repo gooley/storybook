@@ -1,0 +1,57 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - 'web/**'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+      - '.gool3yhost.toml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPO: 943179516876.dkr.ecr.us-east-1.amazonaws.com/gool3yhost
+  APP_NAME: storybook
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::943179516876:role/gool3yhost-github-actions
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push
+        run: |
+          IMAGE_TAG="${{ github.sha }}"
+          docker build -t $ECR_REPO:$APP_NAME-$IMAGE_TAG .
+          docker push $ECR_REPO:$APP_NAME-$IMAGE_TAG
+
+      - name: Deploy via SSM
+        run: |
+          IMAGE_TAG="${{ github.sha }}"
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Name,Values=gool3yhost" \
+            --parameters "commands=[
+              'cd /opt/gool3yhost/apps/${{ env.APP_NAME }}',
+              'export ECR_URI=${{ env.ECR_REPO }}',
+              'export IMAGE_TAG=$IMAGE_TAG',
+              'docker compose pull',
+              'docker compose up -d'
+            ]" \
+            --comment "Deploy ${{ env.APP_NAME }} $IMAGE_TAG"
