@@ -50,6 +50,7 @@ data class SyncBook(
     val description: String = "",
     @SerialName("cover_image_path") val coverImagePath: String? = null,
     val status: String = "ready",
+    val hidden: Int = 0,
     @SerialName("created_at") val createdAt: Long,
     @SerialName("updated_at") val updatedAt: Long,
     @SerialName("deleted_at") val deletedAt: Long? = null

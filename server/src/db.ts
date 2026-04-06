@@ -43,6 +43,7 @@ export function migrate(): void {
       description TEXT NOT NULL DEFAULT '',
       cover_image_path TEXT,
       status TEXT NOT NULL DEFAULT 'ready',
+      hidden INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       deleted_at INTEGER
@@ -109,6 +110,13 @@ export function migrate(): void {
     CREATE INDEX IF NOT EXISTS idx_generation_logs_book ON generation_logs(book_id);
     CREATE INDEX IF NOT EXISTS idx_generation_logs_job ON generation_logs(job_id);
   `);
+
+  // Migration: add hidden column to books (safe to run on existing DBs)
+  try {
+    db.exec("ALTER TABLE books ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0");
+  } catch (_) {
+    // Column already exists
+  }
 
   // Startup recovery: mark orphaned in-progress jobs as error
   db.prepare(`

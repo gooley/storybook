@@ -94,13 +94,14 @@ router.put("/:id", (req: Request, res: Response) => {
     return;
   }
 
-  const { title, description, status, updated_at } = req.body;
+  const { title, description, status, hidden, updated_at } = req.body;
   db.prepare(
-    `UPDATE books SET title = ?, description = ?, status = ?, updated_at = ? WHERE id = ?`
+    `UPDATE books SET title = ?, description = ?, status = ?, hidden = ?, updated_at = ? WHERE id = ?`
   ).run(
     title ?? existing.title,
     description ?? existing.description,
     status ?? existing.status,
+    hidden ?? existing.hidden,
     updated_at || Date.now(),
     req.params.id
   );

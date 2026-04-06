@@ -266,3 +266,25 @@ body {
   font-size: 0.8rem; color: var(--text-muted);
 }
 .debug-log-meta code { background: #f0ece6; padding: 1px 4px; border-radius: 3px; font-size: 0.75rem; }
+
+/* Book visibility controls */
+.book-cover .visibility-btn {
+  position: absolute; top: 6px; right: 6px;
+  width: 30px; height: 30px;
+  border-radius: 50%; border: none;
+  background: rgba(0,0,0,0.55); color: white;
+  font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.15s;
+  z-index: 2;
+}
+.book-cover:hover .visibility-btn { opacity: 1; }
+.book-cover.hidden .visibility-btn { opacity: 0.8; }
+.book-cover.hidden { opacity: 0.45; filter: grayscale(40%); }
+.book-cover.hidden:hover { opacity: 0.7; }
+
+.show-hidden-toggle {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.85rem; color: var(--text-muted); cursor: pointer;
+  user-select: none;
+}
