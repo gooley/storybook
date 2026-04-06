@@ -41,7 +41,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 request
             )
             Log.d(TAG, "Periodic sync scheduled (every 15 min)")

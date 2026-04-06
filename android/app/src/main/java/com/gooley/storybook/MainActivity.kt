@@ -13,8 +13,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Schedule background sync every 15 minutes
+        // Schedule background sync every 15 minutes + run one immediately
         SyncWorker.schedulePeriodicSync(this)
+        SyncWorker.syncNow(this)
 
         setContent {
             StorybookTheme {
