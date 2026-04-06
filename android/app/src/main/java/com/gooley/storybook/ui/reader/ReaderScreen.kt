@@ -29,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -40,6 +41,14 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material3.Icon
+import androidx.compose.material3.FilledTonalButton
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -60,6 +69,7 @@ fun ReaderScreen(
     val progress by viewModel.progress.collectAsState()
 
     var currentPage by remember { mutableIntStateOf(0) }
+    var showExitOverlay by remember { mutableStateOf(false) }
 
     Log.d("ReaderScreen", "Render: bookId=$bookId, pages.size=${pages.size}, pages=${pages.map { "p${it.pageNumber}(${it.imageStatus})" }}")
 
@@ -119,7 +129,7 @@ fun ReaderScreen(
 
             // Invisible tap zones overlaid on left/right thirds
             Row(modifier = Modifier.fillMaxSize()) {
-                // Left third — previous page (or exit on first page)
+                // Left third — previous page
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -130,16 +140,20 @@ fun ReaderScreen(
                         ) {
                             if (currentPage > 0) {
                                 currentPage--
-                            } else {
-                                onBack()
                             }
                         }
                 )
-                // Middle third — no action (dead zone)
+                // Middle third — tap to show/hide exit button
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            showExitOverlay = !showExitOverlay
+                        }
                 )
                 // Right third — next page
                 Box(
@@ -155,6 +169,34 @@ fun ReaderScreen(
                             }
                         }
                 )
+            }
+
+            // Exit overlay — shown when center zone is tapped
+            AnimatedVisibility(
+                visible = showExitOverlay,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.align(Alignment.TopCenter)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 24.dp)
+                        .background(
+                            Color.Black.copy(alpha = 0.6f),
+                            RoundedCornerShape(16.dp)
+                        )
+                        .padding(8.dp)
+                ) {
+                    FilledTonalButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ExitToApp,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.padding(horizontal = 4.dp))
+                        Text("Exit Book")
+                    }
+                }
             }
 
             // Page indicator pill at bottom center
