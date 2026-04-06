@@ -54,28 +54,44 @@ export function CreateBook() {
     }
   }, []);
 
-  // Load models list
+  // Load models list and pre-fill params (combined to avoid race condition)
   useEffect(() => {
-    getAvailableModels().then((models) => {
-      setModelLists(models);
-      setStoryModel(models.defaults.story);
-      setIllustrationModel(models.defaults.illustration);
-      setCoverModel(models.defaults.cover);
-    }).catch(console.error);
-  }, []);
+    let cancelled = false;
+    (async () => {
+      try {
+        const models = await getAvailableModels();
+        if (cancelled) return;
+        setModelLists(models);
 
-  // Load pre-fill params if creating a variation
-  useEffect(() => {
-    if (!fromBookId) return;
-    getBookGenerationParams(fromBookId).then((params) => {
-      setDescription(params.description);
-      setPageCount(params.pageCount);
-      setSelectedIds(new Set(params.characterIds));
-      setVariationTitle(params.title);
-      if (params.storyModel) setStoryModel(params.storyModel);
-      if (params.illustrationModel) setIllustrationModel(params.illustrationModel);
-      if (params.coverModel) setCoverModel(params.coverModel);
-    }).catch(console.error);
+        // If creating a variation, load original params and use those models
+        if (fromBookId) {
+          try {
+            const params = await getBookGenerationParams(fromBookId);
+            if (cancelled) return;
+            setDescription(params.description);
+            setPageCount(params.pageCount);
+            setSelectedIds(new Set(params.characterIds));
+            setVariationTitle(params.title);
+            setStoryModel(params.storyModel || models.defaults.story);
+            setIllustrationModel(params.illustrationModel || models.defaults.illustration);
+            setCoverModel(params.coverModel || models.defaults.cover);
+            setShowModelSettings(true);
+          } catch (e) {
+            console.warn("Could not load generation params for variation:", e);
+            setStoryModel(models.defaults.story);
+            setIllustrationModel(models.defaults.illustration);
+            setCoverModel(models.defaults.cover);
+          }
+        } else {
+          setStoryModel(models.defaults.story);
+          setIllustrationModel(models.defaults.illustration);
+          setCoverModel(models.defaults.cover);
+        }
+      } catch (e) {
+        console.error("Failed to load models:", e);
+      }
+    })();
+    return () => { cancelled = true; };
   }, [fromBookId]);
 
   useEffect(() => {
