@@ -6,12 +6,29 @@ import { authMiddleware } from "./middleware/auth";
 import charactersRouter from "./routes/characters";
 import booksRouter from "./routes/books";
 import syncRouter from "./routes/sync";
+import generateRouter from "./routes/generate";
+import { startWorker, stopWorker } from "./services/generation";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
 // Run migrations
 migrate();
+
+// Start generation worker
+startWorker();
+
+// Graceful shutdown
+process.on("SIGTERM", () => {
+  console.log("SIGTERM received, shutting down...");
+  stopWorker();
+  process.exit(0);
+});
+process.on("SIGINT", () => {
+  console.log("SIGINT received, shutting down...");
+  stopWorker();
+  process.exit(0);
+});
 
 // Middleware
 app.use(cors());
@@ -26,6 +43,7 @@ app.get("/api/healthz", (_req, res) => {
 app.use("/api/characters", charactersRouter);
 app.use("/api/books", booksRouter);
 app.use("/api/sync", syncRouter);
+app.use("/api/generate", generateRouter);
 
 // Serve React SPA in production
 const publicDir = path.join(__dirname, "..", "public");

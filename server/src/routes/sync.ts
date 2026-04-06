@@ -22,6 +22,8 @@ router.get("/changes", (req: Request, res: Response) => {
     .prepare("SELECT * FROM pages WHERE updated_at > ?")
     .all(since);
 
+  // Return in dependency order: characters first, then books, then pages
+  // This ensures Android can resolve book_id FK when inserting pages
   res.json({
     characters,
     books,
