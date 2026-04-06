@@ -24,6 +24,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -61,6 +62,7 @@ fun EditCharacterScreen(
     var name by remember { mutableStateOf("") }
     var type by remember { mutableStateOf(Character.TYPE_FAMILY) }
     var notes by remember { mutableStateOf("") }
+    var includeByDefault by remember { mutableStateOf(false) }
     var photoPath by remember { mutableStateOf<String?>(null) }
     var existingCharacter by remember { mutableStateOf<Character?>(null) }
 
@@ -72,6 +74,7 @@ fun EditCharacterScreen(
                 name = c.name
                 type = c.type
                 notes = c.notes
+                includeByDefault = c.includeByDefault
                 photoPath = c.photoPath
             }
         }
@@ -191,6 +194,23 @@ fun EditCharacterScreen(
                     maxLines = 4
                 )
 
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Include by default in new stories",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Switch(
+                        checked = includeByDefault,
+                        onCheckedChange = { includeByDefault = it }
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Button(
@@ -203,6 +223,7 @@ fun EditCharacterScreen(
                                 type = type,
                                 notes = notes,
                                 photoPath = photoPath,
+                                includeByDefault = includeByDefault,
                                 createdAt = existingCharacter?.createdAt ?: System.currentTimeMillis(),
                                 updatedAt = System.currentTimeMillis(),
                                 dirty = true

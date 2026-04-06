@@ -19,6 +19,7 @@ export interface Character {
   type: "family" | "friend";
   notes: string;
   photo_path: string | null;
+  include_by_default: number;
   created_at: number;
   updated_at: number;
   deleted_at: number | null;

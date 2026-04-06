@@ -16,12 +16,12 @@ export function Characters() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleSave = async (data: { name: string; type: string; notes: string; photo?: File }) => {
+  const handleSave = async (data: { name: string; type: string; notes: string; include_by_default: boolean; photo?: File }) => {
     let char: Character;
     if (editing) {
-      char = await updateCharacter(editing.id, { name: data.name, type: data.type as "family" | "friend", notes: data.notes });
+      char = await updateCharacter(editing.id, { name: data.name, type: data.type as "family" | "friend", notes: data.notes, include_by_default: data.include_by_default ? 1 : 0 });
     } else {
-      char = await createCharacter({ name: data.name, type: data.type as "family" | "friend", notes: data.notes });
+      char = await createCharacter({ name: data.name, type: data.type as "family" | "friend", notes: data.notes, include_by_default: data.include_by_default ? 1 : 0 });
     }
     if (data.photo) await uploadCharacterPhoto(char.id, data.photo);
     setShowForm(false);
@@ -89,6 +89,7 @@ function Section({ title, characters, onEdit, onDelete }: {
             <div className="card-body">
               <h3>{c.name}</h3>
               <span className={`badge badge-${c.type}`}>{c.type}</span>
+              {c.include_by_default ? <span className="badge badge-default">⭐ default</span> : null}
               {c.notes && <p style={{ marginTop: 4 }}>{c.notes}</p>}
               <button className="btn btn-danger" style={{ marginTop: 8, fontSize: "0.8rem", padding: "4px 8px" }}
                 onClick={(e) => { e.stopPropagation(); onDelete(c.id); }}>Delete</button>
@@ -102,12 +103,13 @@ function Section({ title, characters, onEdit, onDelete }: {
 
 function FormModal({ character, onSave, onClose }: {
   character: Character | null;
-  onSave: (data: { name: string; type: string; notes: string; photo?: File }) => Promise<void>;
+  onSave: (data: { name: string; type: string; notes: string; include_by_default: boolean; photo?: File }) => Promise<void>;
   onClose: () => void;
 }) {
   const [name, setName] = useState(character?.name || "");
   const [type, setType] = useState<"family" | "friend">(character?.type || "family");
   const [notes, setNotes] = useState(character?.notes || "");
+  const [includeByDefault, setIncludeByDefault] = useState(!!character?.include_by_default);
   const [photo, setPhoto] = useState<File | undefined>();
   const [photoPreview, setPhotoPreview] = useState<string | null>(
     character?.photo_path ? getCharacterPhotoUrl(character.id) : null
@@ -122,7 +124,7 @@ function FormModal({ character, onSave, onClose }: {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    try { await onSave({ name, type, notes, photo }); } finally { setSaving(false); }
+    try { await onSave({ name, type, notes, include_by_default: includeByDefault, photo }); } finally { setSaving(false); }
   };
 
   return (
@@ -149,6 +151,12 @@ function FormModal({ character, onSave, onClose }: {
             <label>Notes</label>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
               placeholder="Appearance, personality, favorite things…" />
+          </div>
+          <div className="form-group">
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={includeByDefault} onChange={(e) => setIncludeByDefault(e.target.checked)} />
+              Include by default in new stories
+            </label>
           </div>
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>

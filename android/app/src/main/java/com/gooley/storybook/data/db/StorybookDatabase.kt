@@ -10,7 +10,7 @@ import com.gooley.storybook.data.model.Book
 import com.gooley.storybook.data.model.Character
 import com.gooley.storybook.data.model.Page
 
-@Database(entities = [Book::class, Page::class, Character::class], version = 4, exportSchema = false)
+@Database(entities = [Book::class, Page::class, Character::class], version = 5, exportSchema = false)
 abstract class StorybookDatabase : RoomDatabase() {
     abstract fun bookDao(): BookDao
     abstract fun pageDao(): PageDao
@@ -137,6 +137,12 @@ abstract class StorybookDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE characters ADD COLUMN includeByDefault INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun getInstance(context: Context): StorybookDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -144,7 +150,7 @@ abstract class StorybookDatabase : RoomDatabase() {
                     StorybookDatabase::class.java,
                     "storybook.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                 INSTANCE = instance
                 instance

@@ -14,6 +14,7 @@ data class Character(
     val type: String = TYPE_FAMILY,
     val notes: String = "",
     val photoPath: String? = null,
+    val includeByDefault: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val dirty: Boolean = true,

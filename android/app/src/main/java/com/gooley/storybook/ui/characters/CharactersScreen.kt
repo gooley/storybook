@@ -181,11 +181,19 @@ private fun CharacterCard(character: Character, onClick: () -> Unit) {
             Spacer(modifier = Modifier.width(16.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = character.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = character.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (character.includeByDefault) {
+                        Text(
+                            text = " ⭐",
+                            fontSize = 14.sp
+                        )
+                    }
+                }
                 if (character.notes.isNotBlank()) {
                     Text(
                         text = character.notes,

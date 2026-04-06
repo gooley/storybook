@@ -38,12 +38,13 @@ router.post("/push", (req: Request, res: Response) => {
   const results = { characters: 0, books: 0, pages: 0 };
 
   const upsertCharacter = db.prepare(
-    `INSERT INTO characters (id, name, type, notes, photo_path, created_at, updated_at, deleted_at)
-     VALUES (@id, @name, @type, @notes, @photo_path, @created_at, @updated_at, @deleted_at)
+    `INSERT INTO characters (id, name, type, notes, photo_path, include_by_default, created_at, updated_at, deleted_at)
+     VALUES (@id, @name, @type, @notes, @photo_path, @include_by_default, @created_at, @updated_at, @deleted_at)
      ON CONFLICT(id) DO UPDATE SET
        name = CASE WHEN excluded.updated_at > characters.updated_at THEN excluded.name ELSE characters.name END,
        type = CASE WHEN excluded.updated_at > characters.updated_at THEN excluded.type ELSE characters.type END,
        notes = CASE WHEN excluded.updated_at > characters.updated_at THEN excluded.notes ELSE characters.notes END,
+       include_by_default = CASE WHEN excluded.updated_at > characters.updated_at THEN excluded.include_by_default ELSE characters.include_by_default END,
        updated_at = MAX(excluded.updated_at, characters.updated_at),
        deleted_at = CASE WHEN excluded.updated_at > characters.updated_at THEN excluded.deleted_at ELSE characters.deleted_at END`
   );
@@ -80,6 +81,7 @@ router.post("/push", (req: Request, res: Response) => {
           type: c.type || "family",
           notes: c.notes || "",
           photo_path: c.photo_path || null,
+          include_by_default: c.include_by_default || 0,
           created_at: c.created_at || Date.now(),
           updated_at: c.updated_at || Date.now(),
           deleted_at: c.deleted_at || null,
