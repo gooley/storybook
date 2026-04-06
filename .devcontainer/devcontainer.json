@@ -1,0 +1,9 @@
+{
+  "name": "Storybook",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+  "postCreateCommand": "cd /workspace/server && npm ci && cd /workspace/web && npm ci && npm run build && cp -r /workspace/web/dist /workspace/server/public",
+  "containerEnv": {
+    "NODE_ENV": "development",
+    "DATA_DIR": "/workspace/data"
+  }
+}
