@@ -1,7 +1,10 @@
 package com.gooley.storybook.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -37,7 +40,18 @@ fun NavGraph() {
     val characterDao = db.characterDao()
 
     NavHost(navController = navController, startDestination = Routes.BOOKSHELF) {
-        composable(Routes.BOOKSHELF) {
+        composable(Routes.BOOKSHELF) { backStackEntry ->
+            // Sync every time the bookshelf becomes active (initial load + returning from other screens)
+            DisposableEffect(backStackEntry) {
+                val observer = LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_RESUME) {
+                        SyncWorker.syncNow(context)
+                    }
+                }
+                backStackEntry.lifecycle.addObserver(observer)
+                onDispose { backStackEntry.lifecycle.removeObserver(observer) }
+            }
+
             BookshelfScreen(
                 repository = repository,
                 onBookClick = { bookId -> navController.navigate(Routes.reader(bookId)) },
