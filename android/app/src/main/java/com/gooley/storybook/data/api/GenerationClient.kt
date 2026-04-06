@@ -13,11 +13,19 @@ import java.util.concurrent.TimeUnit
 
 class GenerationClient {
     private val baseUrl = BuildConfig.SYNC_API_URL.trimEnd('/')
+    private val apiKey = BuildConfig.SYNC_API_KEY
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
+        .addInterceptor { chain ->
+            val request = chain.request().newBuilder()
+            if (apiKey.isNotEmpty()) {
+                request.header("Authorization", "Bearer $apiKey")
+            }
+            chain.proceed(request.build())
+        }
         .build()
 
     private val json = Json { ignoreUnknownKeys = true }
