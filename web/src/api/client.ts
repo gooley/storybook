@@ -44,6 +44,21 @@ export interface Page {
   image_status: string;
 }
 
+export interface GenerationStatus {
+  id: string;
+  status: string;
+  bookId: string | null;
+  progressMessage: string | null;
+  progressFraction: number;
+  completedSteps: number;
+  totalSteps: number;
+  firstIllustrationReady: boolean;
+  completedPageIds: string[];
+  errorMessage: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export const getCharacters = () => request<Character[]>("/characters");
 export const createCharacter = (data: Partial<Character>) =>
   request<Character>("/characters", { method: "POST", body: JSON.stringify(data) });
@@ -66,3 +81,21 @@ export const getBook = (id: string) => request<Book>(`/books/${id}`);
 export const getBookPages = (id: string) => request<Page[]>(`/books/${id}/pages`);
 export const getBookCoverUrl = (id: string) => `${BASE}/books/${id}/cover`;
 export const getPageImageUrl = (pageId: string) => `${BASE}/books/pages/${pageId}/image`;
+
+// Generation API
+export const startGeneration = (data: {
+  description: string;
+  pageCount: number;
+  characterIds: string[];
+  bookId?: string;
+}) =>
+  request<{ jobId: string; bookId: string }>("/generate/book", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export const pollGenerationStatus = (jobId: string) =>
+  request<GenerationStatus>(`/generate/${jobId}/status`);
+
+export const getActiveGenerationJobs = () =>
+  request<GenerationStatus[]>("/generate/active");
