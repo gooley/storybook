@@ -48,7 +48,7 @@ function checkRateLimits(): string | null {
 
 // POST /api/generate/book — Start a new book generation job
 router.post("/book", (req: Request, res: Response) => {
-  const { description, pageCount, characterIds, bookId } = req.body;
+  const { description, pageCount, characterIds, bookId, storyModel, illustrationModel, coverModel } = req.body;
 
   // Validation
   if (!description || typeof description !== "string") {
@@ -122,6 +122,9 @@ router.post("/book", (req: Request, res: Response) => {
       pageCount: count,
       characterIds: characterIds || [],
       bookId: resolvedBookId,
+      ...(storyModel && { storyModel }),
+      ...(illustrationModel && { illustrationModel }),
+      ...(coverModel && { coverModel }),
     }),
     now,
     now

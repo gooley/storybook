@@ -43,6 +43,7 @@ export function Reader() {
         <button className="btn btn-secondary" onClick={() => navigate("/")}>← Back</button>
         <h2>{book.title}</h2>
         <div className="reader-nav-right">
+          <button className="btn btn-secondary btn-small" onClick={() => navigate(`/create?from=${bookId}`)}>🔄 Variation</button>
           <button className="btn btn-secondary btn-small" onClick={() => navigate(`/reader/${bookId}/debug`)}>🔍 Debug</button>
           <span className="reader-page-num">{currentPage + 1} / {pages.length}</span>
         </div>
