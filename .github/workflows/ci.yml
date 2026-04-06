@@ -92,9 +92,9 @@ jobs:
           }
           trap cleanup EXIT
 
-          timeout 90 bash -lc 'until curl -fsS http://127.0.0.1:3000/api/healthz | grep -q "\"status\":\"ok\""; do sleep 2; done'
-          timeout 90 bash -lc 'until curl -fsS http://127.0.0.1:5173 | grep -qi "<!doctype html>"; do sleep 2; done'
-          curl -fsS http://127.0.0.1:5173/api/healthz | grep -q '"status":"ok"'
+          timeout 90 bash -lc 'until curl -fsS http://localhost:3000/api/healthz | grep -q "\"status\":\"ok\""; do sleep 2; done'
+          timeout 90 bash -lc 'until curl -fsS http://localhost:5173 | grep -qi "<!doctype html>"; do sleep 2; done'
+          curl -fsS http://localhost:5173/api/healthz | grep -q '"status":"ok"'
 
       - name: Show dev logs on failure
         if: failure()
