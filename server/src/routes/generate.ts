@@ -225,6 +225,25 @@ router.post("/regenerate-covers", (_req: Request, res: Response) => {
   res.status(202).json({ jobId });
 });
 
+// GET /api/generate/:jobId/logs — Get generation logs for a specific job
+router.get("/:jobId/logs", (req: Request, res: Response) => {
+  const jobId = req.params.jobId as string;
+  const job = db
+    .prepare("SELECT id FROM generation_jobs WHERE id = ?")
+    .get(jobId);
+  if (!job) {
+    res.status(404).json({ error: "Job not found" });
+    return;
+  }
+
+  const logs = db
+    .prepare(
+      "SELECT * FROM generation_logs WHERE job_id = ? ORDER BY created_at ASC"
+    )
+    .all(jobId);
+  res.json(logs);
+});
+
 function formatJobStatus(job: GenerationJob) {
   return {
     id: job.id,

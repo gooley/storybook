@@ -182,6 +182,24 @@ router.get("/:id/cover", (req: Request, res: Response) => {
   res.sendFile(filePath);
 });
 
+// Get generation logs for a book
+router.get("/:id/generation-logs", (req: Request, res: Response) => {
+  const book = db
+    .prepare("SELECT id FROM books WHERE id = ? AND deleted_at IS NULL")
+    .get(req.params.id);
+  if (!book) {
+    res.status(404).json({ error: "Book not found" });
+    return;
+  }
+
+  const logs = db
+    .prepare(
+      "SELECT * FROM generation_logs WHERE book_id = ? ORDER BY created_at ASC"
+    )
+    .all(req.params.id);
+  res.json(logs);
+});
+
 // Get pages for a book
 router.get("/:id/pages", (req: Request, res: Response) => {
   const pages = db

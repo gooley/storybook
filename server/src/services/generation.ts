@@ -8,7 +8,44 @@ import {
   generateIllustration,
   generateCover,
   CharacterRef,
+  GenerationResult,
 } from "./openrouter";
+
+// --- Generation Log Helper ---
+
+function saveGenerationLog(
+  result: Omit<GenerationResult<any>, "data">,
+  context: {
+    jobId: string;
+    bookId: string | null;
+    pageId: string | null;
+    stepType: "story" | "illustration" | "cover";
+  }
+) {
+  const id = nanoid();
+  db.prepare(
+    `INSERT INTO generation_logs (id, job_id, book_id, page_id, step_type, model, prompt, system_prompt, character_refs_json, num_images_attached, had_reference_image, response_text, response_model, success, error_message, duration_ms, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    id,
+    context.jobId,
+    context.bookId,
+    context.pageId,
+    context.stepType,
+    result.model,
+    result.prompt,
+    result.systemPrompt,
+    result.characterRefsJson,
+    result.numImagesAttached,
+    result.hadReferenceImage ? 1 : 0,
+    result.responseText,
+    result.responseModel,
+    result.success ? 1 : 0,
+    result.errorMessage,
+    result.durationMs,
+    Date.now()
+  );
+}
 
 // Concurrency controls
 const ILLUSTRATION_CONCURRENCY = 3;
@@ -183,7 +220,15 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
   const enrichedDescription = enrichDescription(description, characters);
 
   // Step 1: Generate story text
-  const story = await generateStory(enrichedDescription, pageCount);
+  const storyResult = await generateStory(enrichedDescription, pageCount);
+  const story = storyResult.data;
+
+  saveGenerationLog(storyResult, {
+    jobId: job.id,
+    bookId,
+    pageId: null,
+    stepType: "story",
+  });
 
   if (isJobCancelled(job.id)) return;
 
@@ -226,13 +271,21 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
     progress_message: "Drawing illustration 1 of " + pageCount + "...",
   });
 
-  const firstSuccess = await generateIllustration(
+  const firstResult = await generateIllustration(
     firstPageText,
     story.title,
     firstImagePath,
     null,
     characters
   );
+  const firstSuccess = firstResult.data;
+
+  saveGenerationLog(firstResult, {
+    jobId: job.id,
+    bookId,
+    pageId: firstPageId,
+    stepType: "illustration",
+  });
 
   if (firstSuccess) {
     db.prepare(
@@ -278,13 +331,21 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
           "UPDATE pages SET image_status = 'generating', updated_at = ? WHERE id = ?"
         ).run(Date.now(), pageId);
 
-        const success = await generateIllustration(
+        const illusResult = await generateIllustration(
           pageText,
           story.title,
           imagePath,
           firstSuccess ? firstImagePath : null,
           characters
         );
+        const success = illusResult.data;
+
+        saveGenerationLog(illusResult, {
+          jobId: job.id,
+          bookId,
+          pageId,
+          stepType: "illustration",
+        });
 
         completedSteps++;
         if (success) {
@@ -314,11 +375,19 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
       if (isJobCancelled(job.id)) return;
 
       const coverPath = path.join(coversDir, `${bookId}.png`);
-      const success = await generateCover(
+      const coverResult = await generateCover(
         story.title,
         firstSuccess ? firstImagePath : "",
         coverPath
       );
+      const success = coverResult.data;
+
+      saveGenerationLog(coverResult, {
+        jobId: job.id,
+        bookId,
+        pageId: null,
+        stepType: "cover",
+      });
 
       completedSteps++;
       if (success) {
@@ -431,13 +500,21 @@ async function executeRegenerateIllustrations(
         "UPDATE pages SET image_status = 'generating', updated_at = ? WHERE id = ?"
       ).run(Date.now(), page.id);
 
-      const success = await generateIllustration(
+      const illusResult = await generateIllustration(
         page.text,
         book.title,
         imagePath,
         referenceImagePath,
         characters
       );
+      const success = illusResult.data;
+
+      saveGenerationLog(illusResult, {
+        jobId: job.id,
+        bookId,
+        pageId: page.id,
+        stepType: "illustration",
+      });
 
       completedSteps++;
       if (success) {
@@ -532,7 +609,15 @@ async function executeRegenerateCovers(job: GenerationJob): Promise<void> {
       }
 
       const coverPath = path.join(coversDir, `${book.id}.png`);
-      const success = await generateCover(book.title, firstPageImagePath, coverPath);
+      const coverResult = await generateCover(book.title, firstPageImagePath, coverPath);
+      const success = coverResult.data;
+
+      saveGenerationLog(coverResult, {
+        jobId: job.id,
+        bookId: book.id,
+        pageId: null,
+        stepType: "cover",
+      });
 
       if (success) {
         db.prepare(
@@ -595,6 +680,17 @@ async function workerTick(): Promise<void> {
     await processJob(job);
   } catch (e: any) {
     console.error(`Generation job ${job.id} failed:`, e);
+
+    // Save generation log from error metadata if available (e.g. story generation failure)
+    if (e.generationMeta) {
+      saveGenerationLog(e.generationMeta, {
+        jobId: job.id,
+        bookId: job.book_id,
+        pageId: null,
+        stepType: "story",
+      });
+    }
+
     updateJobStatus(job.id, {
       status: "error",
       error_message: e.message || "Unknown error",
