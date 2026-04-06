@@ -191,6 +191,12 @@ export function BookDebug() {
             ← Reader
           </button>
           <h2>🔍 Debug: {book.title}</h2>
+          <button
+            className="btn btn-secondary"
+            onClick={() => navigate(`/create?from=${bookId}`)}
+          >
+            🔄 Create Variation
+          </button>
         </div>
 
         <div className="debug-summary">

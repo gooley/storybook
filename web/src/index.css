@@ -288,3 +288,45 @@ body {
   font-size: 0.85rem; color: var(--text-muted); cursor: pointer;
   user-select: none;
 }
+
+/* Model Settings */
+.model-settings-toggle {
+  display: flex; align-items: center; gap: 8px;
+  background: none; border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 8px 14px; font-size: 0.9rem; cursor: pointer;
+  color: var(--text); width: 100%;
+}
+.model-settings-toggle:hover { background: var(--primary-light); }
+.toggle-arrow { transition: transform 0.2s; margin-left: auto; }
+.toggle-arrow.open { transform: rotate(90deg); }
+.model-settings-badge {
+  font-size: 0.75rem; padding: 2px 8px; border-radius: 12px;
+  background: var(--primary-light); color: var(--primary); font-weight: 500;
+}
+
+.model-settings-panel {
+  display: flex; flex-direction: column; gap: 12px;
+  margin-top: 10px; padding: 14px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: #faf9f7;
+}
+
+.model-selector { display: flex; flex-direction: column; gap: 4px; }
+.model-selector-label { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.model-selector-controls { display: flex; flex-direction: column; gap: 6px; }
+.model-selector-dropdown {
+  width: 100%; padding: 6px 10px; border: 1px solid var(--border);
+  border-radius: var(--radius); font-size: 0.9rem; background: var(--surface);
+}
+.model-selector-custom-input {
+  width: 100%; padding: 6px 10px; border: 1px solid var(--primary);
+  border-radius: var(--radius); font-size: 0.85rem; font-family: monospace;
+}
+.model-selector-id { font-size: 0.75rem; color: var(--text-muted); font-family: monospace; }
+
+/* Variation banner */
+.variation-banner {
+  padding: 10px 16px; margin-bottom: 16px;
+  background: #e8f0fe; border: 1px solid #b8d4f0; border-radius: var(--radius);
+  font-size: 0.9rem; color: #1a56c4;
+}

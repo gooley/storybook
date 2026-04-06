@@ -197,6 +197,10 @@ function enrichDescription(
 async function executeGenerateBook(job: GenerationJob): Promise<void> {
   const payload = JSON.parse(job.request_payload);
   const { description, pageCount, characterIds, bookId } = payload;
+  // Optional model overrides
+  const storyModel: string | undefined = payload.storyModel;
+  const illustrationModel: string | undefined = payload.illustrationModel;
+  const coverModel: string | undefined = payload.coverModel;
   const uploadsDir = getUploadsDir();
   const illustrationsDir = path.join(uploadsDir, "illustrations");
   const coversDir = path.join(uploadsDir, "covers");
@@ -220,7 +224,7 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
   const enrichedDescription = enrichDescription(description, characters);
 
   // Step 1: Generate story text
-  const storyResult = await generateStory(enrichedDescription, pageCount);
+  const storyResult = await generateStory(enrichedDescription, pageCount, storyModel);
   const story = storyResult.data;
 
   saveGenerationLog(storyResult, {
@@ -276,7 +280,8 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
     story.title,
     firstImagePath,
     null,
-    characters
+    characters,
+    illustrationModel
   );
   const firstSuccess = firstResult.data;
 
@@ -336,7 +341,8 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
           story.title,
           imagePath,
           firstSuccess ? firstImagePath : null,
-          characters
+          characters,
+          illustrationModel
         );
         const success = illusResult.data;
 
@@ -378,7 +384,8 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
       const coverResult = await generateCover(
         story.title,
         firstSuccess ? firstImagePath : "",
-        coverPath
+        coverPath,
+        coverModel
       );
       const success = coverResult.data;
 

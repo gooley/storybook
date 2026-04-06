@@ -1,1 +1,1 @@
-{"root":["./src/main.tsx","./src/vite-env.d.ts","./src/api/client.ts","./src/pages/BookDebug.tsx","./src/pages/Books.tsx","./src/pages/Characters.tsx","./src/pages/CreateBook.tsx","./src/pages/Reader.tsx"],"version":"6.0.2"}
+{"root":["./src/main.tsx","./src/vite-env.d.ts","./src/api/client.ts","./src/components/ModelSelector.tsx","./src/pages/BookDebug.tsx","./src/pages/Books.tsx","./src/pages/Characters.tsx","./src/pages/CreateBook.tsx","./src/pages/Reader.tsx"],"version":"6.0.2"}

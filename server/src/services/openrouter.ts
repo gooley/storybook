@@ -6,10 +6,10 @@ import { getUploadsDir } from "../db";
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-// Models
-const STORY_MODEL = "anthropic/claude-sonnet-4.6";
-const ILLUSTRATION_MODEL = "google/gemini-3.1-flash-image-preview";
-const COVER_MODEL = "bytedance-seed/seedream-4.5";
+// Default models
+export const DEFAULT_STORY_MODEL = "anthropic/claude-sonnet-4.6";
+export const DEFAULT_ILLUSTRATION_MODEL = "google/gemini-3.1-flash-image-preview";
+export const DEFAULT_COVER_MODEL = "bytedance-seed/seedream-4.5";
 
 export interface CharacterRef {
   name: string;
@@ -176,8 +176,10 @@ function parseStoryResponse(content: string): StoryResponse {
 
 export async function generateStory(
   description: string,
-  pageCount: number
+  pageCount: number,
+  model?: string
 ): Promise<GenerationResult<StoryResponse>> {
+  const useModel = model || DEFAULT_STORY_MODEL;
   const systemPrompt = `You are a children's storybook author. Write a short, engaging story for young children (ages 3-7).
 
 Rules:
@@ -198,7 +200,7 @@ Return ONLY the JSON object, no other text.`;
 
   try {
     const response = await makeRequest({
-      model: STORY_MODEL,
+      model: useModel,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -212,7 +214,7 @@ Return ONLY the JSON object, no other text.`;
 
     return {
       data: story,
-      model: STORY_MODEL,
+      model: useModel,
       prompt: userPrompt,
       systemPrompt,
       responseText: content,
@@ -227,7 +229,7 @@ Return ONLY the JSON object, no other text.`;
   } catch (e: any) {
     throw Object.assign(e, {
       generationMeta: {
-        model: STORY_MODEL,
+        model: useModel,
         prompt: userPrompt,
         systemPrompt,
         responseText: null,
@@ -248,8 +250,10 @@ export async function generateIllustration(
   bookTitle: string,
   outputPath: string,
   previousImagePath: string | null,
-  characters: CharacterRef[]
+  characters: CharacterRef[],
+  model?: string
 ): Promise<GenerationResult<boolean>> {
+  const useModel = model || DEFAULT_ILLUSTRATION_MODEL;
   const uploadsDir = getUploadsDir();
   const startTime = Date.now();
   let numImagesAttached = 0;
@@ -318,7 +322,7 @@ export async function generateIllustration(
     parts.push({ type: "text", text: prompt });
 
     const response = await makeRequest({
-      model: ILLUSTRATION_MODEL,
+      model: useModel,
       messages: [{ role: "user", content: parts }],
     });
 
@@ -328,7 +332,7 @@ export async function generateIllustration(
       console.log(`Saved illustration to ${outputPath}`);
       return {
         data: true,
-        model: ILLUSTRATION_MODEL,
+        model: useModel,
         prompt,
         systemPrompt: null,
         responseText: null,
@@ -345,7 +349,7 @@ export async function generateIllustration(
     console.warn("No image data in illustration response");
     return {
       data: false,
-      model: ILLUSTRATION_MODEL,
+      model: useModel,
       prompt,
       systemPrompt: null,
       responseText: null,
@@ -361,7 +365,7 @@ export async function generateIllustration(
     console.error("Illustration generation error:", e);
     return {
       data: false,
-      model: ILLUSTRATION_MODEL,
+      model: useModel,
       prompt,
       systemPrompt: null,
       responseText: null,
@@ -379,8 +383,10 @@ export async function generateIllustration(
 export async function generateCover(
   title: string,
   firstPageImagePath: string,
-  outputPath: string
+  outputPath: string,
+  model?: string
 ): Promise<GenerationResult<boolean>> {
+  const useModel = model || DEFAULT_COVER_MODEL;
   const startTime = Date.now();
   const prompt =
     `Use this image as the basis for generating a book cover ` +
@@ -404,7 +410,7 @@ export async function generateCover(
     }
 
     const response = await makeRequest({
-      model: COVER_MODEL,
+      model: useModel,
       messages: [{ role: "user", content: parts }],
       modalities: ["image"],
     });
@@ -415,7 +421,7 @@ export async function generateCover(
       console.log(`Saved cover to ${outputPath}`);
       return {
         data: true,
-        model: COVER_MODEL,
+        model: useModel,
         prompt,
         systemPrompt: null,
         responseText: null,
@@ -432,7 +438,7 @@ export async function generateCover(
     console.warn("No image data in cover response");
     return {
       data: false,
-      model: COVER_MODEL,
+      model: useModel,
       prompt,
       systemPrompt: null,
       responseText: null,
@@ -448,7 +454,7 @@ export async function generateCover(
     console.error("Cover generation error:", e);
     return {
       data: false,
-      model: COVER_MODEL,
+      model: useModel,
       prompt,
       systemPrompt: null,
       responseText: null,

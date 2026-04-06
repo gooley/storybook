@@ -183,6 +183,49 @@ router.get("/:id/cover", (req: Request, res: Response) => {
   res.sendFile(filePath);
 });
 
+// Get original generation params for a book (for "create variation" flow)
+router.get("/:id/generation-params", (req: Request, res: Response) => {
+  const book = db
+    .prepare("SELECT id, title, description FROM books WHERE id = ? AND deleted_at IS NULL")
+    .get(req.params.id) as any;
+  if (!book) {
+    res.status(404).json({ error: "Book not found" });
+    return;
+  }
+
+  // Find the most recent generate_book job for this book
+  const job = db
+    .prepare(
+      "SELECT request_payload FROM generation_jobs WHERE book_id = ? AND request_payload LIKE '%generate_book%' ORDER BY created_at DESC LIMIT 1"
+    )
+    .get(req.params.id) as { request_payload: string } | undefined;
+
+  if (!job) {
+    // No job found — return what we know from the book itself
+    const pageCount = db
+      .prepare("SELECT COUNT(*) as count FROM pages WHERE book_id = ? AND deleted_at IS NULL")
+      .get(req.params.id) as any;
+    res.json({
+      description: book.description || "",
+      pageCount: pageCount.count || 4,
+      characterIds: [],
+      title: book.title,
+    });
+    return;
+  }
+
+  const payload = JSON.parse(job.request_payload);
+  res.json({
+    description: payload.description || book.description || "",
+    pageCount: payload.pageCount || 4,
+    characterIds: payload.characterIds || [],
+    title: book.title,
+    storyModel: payload.storyModel || null,
+    illustrationModel: payload.illustrationModel || null,
+    coverModel: payload.coverModel || null,
+  });
+});
+
 // Get generation logs for a book
 router.get("/:id/generation-logs", (req: Request, res: Response) => {
   const book = db

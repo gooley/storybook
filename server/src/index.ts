@@ -7,6 +7,7 @@ import charactersRouter from "./routes/characters";
 import booksRouter from "./routes/books";
 import syncRouter from "./routes/sync";
 import generateRouter from "./routes/generate";
+import modelsRouter from "./routes/models";
 import { startWorker, stopWorker } from "./services/generation";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
@@ -45,6 +46,7 @@ app.use("/api/characters", charactersRouter);
 app.use("/api/books", booksRouter);
 app.use("/api/sync", syncRouter);
 app.use("/api/generate", generateRouter);
+app.use("/api/models", modelsRouter);
 
 // Serve React SPA in production
 const publicDir = path.join(__dirname, "..", "public");

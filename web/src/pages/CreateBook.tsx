@@ -1,14 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   getCharacters,
   getCharacterPhotoUrl,
   getPageImageUrl,
   startGeneration,
   pollGenerationStatus,
+  getAvailableModels,
+  getBookGenerationParams,
   type Character,
   type GenerationStatus,
+  type ModelLists,
 } from "../api/client";
+import { ModelSelector } from "../components/ModelSelector";
 
 const PAGE_COUNT_OPTIONS = [2, 4, 8];
 const POLL_INTERVAL_FAST = 2000;
@@ -17,11 +21,22 @@ const SLOW_THRESHOLD_MS = 30000;
 
 export function CreateBook() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const fromBookId = searchParams.get("from");
+
   const [description, setDescription] = useState("");
   const [pageCount, setPageCount] = useState(4);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [variationTitle, setVariationTitle] = useState<string | null>(null);
+
+  // Model settings
+  const [modelLists, setModelLists] = useState<ModelLists | null>(null);
+  const [showModelSettings, setShowModelSettings] = useState(false);
+  const [storyModel, setStoryModel] = useState("");
+  const [illustrationModel, setIllustrationModel] = useState("");
+  const [coverModel, setCoverModel] = useState("");
 
   // Generation state
   const [generating, setGenerating] = useState(false);
@@ -42,6 +57,30 @@ export function CreateBook() {
       setLoading(false);
     }
   }, []);
+
+  // Load models list
+  useEffect(() => {
+    getAvailableModels().then((models) => {
+      setModelLists(models);
+      setStoryModel(models.defaults.story);
+      setIllustrationModel(models.defaults.illustration);
+      setCoverModel(models.defaults.cover);
+    }).catch(console.error);
+  }, []);
+
+  // Load pre-fill params if creating a variation
+  useEffect(() => {
+    if (!fromBookId) return;
+    getBookGenerationParams(fromBookId).then((params) => {
+      setDescription(params.description);
+      setPageCount(params.pageCount);
+      setSelectedIds(new Set(params.characterIds));
+      setVariationTitle(params.title);
+      if (params.storyModel) setStoryModel(params.storyModel);
+      if (params.illustrationModel) setIllustrationModel(params.illustrationModel);
+      if (params.coverModel) setCoverModel(params.coverModel);
+    }).catch(console.error);
+  }, [fromBookId]);
 
   useEffect(() => {
     loadCharacters();
@@ -109,11 +148,26 @@ export function CreateBook() {
     setStatus(null);
     setPreviewPageId(null);
 
+    // Only send model overrides if they differ from defaults
+    const modelOverrides: Record<string, string> = {};
+    if (modelLists) {
+      if (storyModel && storyModel !== modelLists.defaults.story) {
+        modelOverrides.storyModel = storyModel;
+      }
+      if (illustrationModel && illustrationModel !== modelLists.defaults.illustration) {
+        modelOverrides.illustrationModel = illustrationModel;
+      }
+      if (coverModel && coverModel !== modelLists.defaults.cover) {
+        modelOverrides.coverModel = coverModel;
+      }
+    }
+
     try {
       const result = await startGeneration({
         description: description.trim(),
         pageCount,
         characterIds: Array.from(selectedIds),
+        ...modelOverrides,
       });
       startPolling(result.jobId, result.bookId);
     } catch (e: any) {
@@ -121,6 +175,12 @@ export function CreateBook() {
       setGenerating(false);
     }
   };
+
+  const hasNonDefaultModels = modelLists && (
+    storyModel !== modelLists.defaults.story ||
+    illustrationModel !== modelLists.defaults.illustration ||
+    coverModel !== modelLists.defaults.cover
+  );
 
   const familyChars = characters.filter((c) => c.type === "family");
   const friendChars = characters.filter((c) => c.type === "friend");
@@ -130,8 +190,14 @@ export function CreateBook() {
   return (
     <div className="create-page">
       <div className="page-header">
-        <h2>✨ Create a Story</h2>
+        <h2>{fromBookId ? "🔄 Create Variation" : "✨ Create a Story"}</h2>
       </div>
+
+      {variationTitle && (
+        <div className="variation-banner">
+          Based on: <strong>{variationTitle}</strong> — tweak settings and generate a new version
+        </div>
+      )}
 
       {!generating ? (
         <div className="create-form">
@@ -215,6 +281,43 @@ export function CreateBook() {
             </div>
           )}
 
+          {/* Model Settings */}
+          {modelLists && (
+            <div className="form-group">
+              <button
+                className="model-settings-toggle"
+                onClick={() => setShowModelSettings(!showModelSettings)}
+              >
+                ⚙️ Model Settings
+                {hasNonDefaultModels && <span className="model-settings-badge">customized</span>}
+                <span className={`toggle-arrow ${showModelSettings ? "open" : ""}`}>▸</span>
+              </button>
+
+              {showModelSettings && (
+                <div className="model-settings-panel">
+                  <ModelSelector
+                    label="Story"
+                    options={modelLists.story}
+                    value={storyModel}
+                    onChange={setStoryModel}
+                  />
+                  <ModelSelector
+                    label="Illustrations"
+                    options={modelLists.illustration}
+                    value={illustrationModel}
+                    onChange={setIllustrationModel}
+                  />
+                  <ModelSelector
+                    label="Cover"
+                    options={modelLists.cover}
+                    value={coverModel}
+                    onChange={setCoverModel}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
           {error && <div className="error-banner">{error}</div>}
 
           <button
@@ -222,7 +325,7 @@ export function CreateBook() {
             onClick={handleGenerate}
             disabled={!description.trim()}
           >
-            ✨ Generate Story
+            {fromBookId ? "🔄 Generate Variation" : "✨ Generate Story"}
           </button>
         </div>
       ) : (

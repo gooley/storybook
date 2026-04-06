@@ -92,6 +92,9 @@ export const startGeneration = (data: {
   pageCount: number;
   characterIds: string[];
   bookId?: string;
+  storyModel?: string;
+  illustrationModel?: string;
+  coverModel?: string;
 }) =>
   request<{ jobId: string; bookId: string }>("/generate/book", {
     method: "POST",
@@ -103,6 +106,37 @@ export const pollGenerationStatus = (jobId: string) =>
 
 export const getActiveGenerationJobs = () =>
   request<GenerationStatus[]>("/generate/active");
+
+// Models API
+export interface ModelOption {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  compatibility: "tested" | "experimental";
+}
+
+export interface ModelLists {
+  story: ModelOption[];
+  illustration: ModelOption[];
+  cover: ModelOption[];
+  defaults: { story: string; illustration: string; cover: string };
+}
+
+export const getAvailableModels = () => request<ModelLists>("/models");
+
+// Generation params (for "create variation" flow)
+export interface GenerationParams {
+  description: string;
+  pageCount: number;
+  characterIds: string[];
+  title: string;
+  storyModel: string | null;
+  illustrationModel: string | null;
+  coverModel: string | null;
+}
+
+export const getBookGenerationParams = (bookId: string) =>
+  request<GenerationParams>(`/books/${bookId}/generation-params`);
 
 // Generation logs
 export interface GenerationLog {
