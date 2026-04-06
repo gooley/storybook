@@ -30,6 +30,11 @@ android {
             "SYNC_API_URL",
             "\"${localProperties.getProperty("SYNC_API_URL", "")}\""
         )
+        buildConfigField(
+            "String",
+            "SYNC_API_KEY",
+            "\"${localProperties.getProperty("SYNC_API_KEY", "")}\""
+        )
     }
 
     buildTypes {
