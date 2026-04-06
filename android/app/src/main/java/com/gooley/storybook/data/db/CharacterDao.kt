@@ -24,6 +24,9 @@ interface CharacterDao {
     @Query("SELECT * FROM characters WHERE uuid = :uuid")
     suspend fun getByUuid(uuid: String): Character?
 
+    @Query("SELECT uuid FROM characters WHERE id = :localId")
+    suspend fun getUuidByLocalId(localId: Long): String?
+
     @Query("SELECT * FROM characters WHERE type = :type AND deletedAt IS NULL ORDER BY name")
     fun getByType(type: String): Flow<List<Character>>
 

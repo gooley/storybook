@@ -2,7 +2,10 @@ import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", "data");
+const REPO_ROOT = path.resolve(__dirname, "../..");
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(REPO_ROOT, process.env.DATA_DIR)
+  : path.join(__dirname, "..", "data");
 const DB_PATH = path.join(DATA_DIR, "storybook.db");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -61,7 +64,42 @@ export function migrate(): void {
     CREATE INDEX IF NOT EXISTS idx_characters_updated ON characters(updated_at);
     CREATE INDEX IF NOT EXISTS idx_books_updated ON books(updated_at);
     CREATE INDEX IF NOT EXISTS idx_pages_updated ON pages(updated_at);
+
+    CREATE TABLE IF NOT EXISTS generation_jobs (
+      id TEXT PRIMARY KEY,
+      book_id TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      progress_message TEXT,
+      progress_fraction REAL DEFAULT 0,
+      total_steps INTEGER DEFAULT 0,
+      completed_steps INTEGER DEFAULT 0,
+      first_illustration_ready INTEGER DEFAULT 0,
+      completed_page_ids TEXT,
+      error_message TEXT,
+      request_payload TEXT,
+      started_at INTEGER,
+      heartbeat_at INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_generation_jobs_status ON generation_jobs(status);
+    CREATE INDEX IF NOT EXISTS idx_generation_jobs_updated ON generation_jobs(updated_at);
   `);
+
+  // Startup recovery: mark orphaned in-progress jobs as error
+  db.prepare(`
+    UPDATE generation_jobs
+    SET status = 'error', error_message = 'Server restarted during generation', updated_at = ?
+    WHERE status NOT IN ('done', 'error', 'cancelled', 'pending')
+  `).run(Date.now());
+
+  // Cleanup: delete completed/errored jobs older than 24 hours
+  db.prepare(`
+    DELETE FROM generation_jobs
+    WHERE status IN ('done', 'error', 'cancelled')
+    AND created_at < ?
+  `).run(Date.now() - 24 * 60 * 60 * 1000);
 }
 
 export default db;

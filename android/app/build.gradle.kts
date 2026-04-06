@@ -27,18 +27,8 @@ android {
 
         buildConfigField(
             "String",
-            "OPENROUTER_API_KEY",
-            "\"${localProperties.getProperty("OPENROUTER_API_KEY", "")}\""
-        )
-        buildConfigField(
-            "String",
             "SYNC_API_URL",
             "\"${localProperties.getProperty("SYNC_API_URL", "")}\""
-        )
-        buildConfigField(
-            "String",
-            "SYNC_API_KEY",
-            "\"${localProperties.getProperty("SYNC_API_KEY", "")}\""
         )
     }
 

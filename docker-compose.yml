@@ -3,7 +3,7 @@ services:
     image: ${ECR_URI}:storybook-${IMAGE_TAG}
     restart: unless-stopped
     environment:
-    - API_KEY=${API_KEY}
+    - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
     - NODE_ENV=production
     - DATA_DIR=/app/data
     volumes:

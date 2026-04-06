@@ -1,29 +1,28 @@
 package com.gooley.storybook.data.repository
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.util.Log
-import com.gooley.storybook.data.api.CharacterRef
-import com.gooley.storybook.data.api.OpenRouterClient
+import com.gooley.storybook.data.api.GenerationClient
+import com.gooley.storybook.data.api.GenerationRequest
+import com.gooley.storybook.data.api.GenerationStatus
 import com.gooley.storybook.data.db.StorybookDatabase
 import com.gooley.storybook.data.model.Book
 import com.gooley.storybook.data.model.Page
+import com.gooley.storybook.data.sync.SyncClient
+import com.gooley.storybook.data.sync.SyncManager
 import com.gooley.storybook.data.sync.SyncWorker
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import java.io.File
+import java.security.SecureRandom
 
 class BookRepository(private val context: Context) {
     private val db = StorybookDatabase.getInstance(context)
     private val bookDao = db.bookDao()
     private val pageDao = db.pageDao()
     private val characterDao = db.characterDao()
-    private val apiClient = OpenRouterClient()
-    private val imagesDir = File(context.filesDir, "illustrations").also { it.mkdirs() }
-    private val scaledPhotosDir = File(context.cacheDir, "scaled_photos").also { it.mkdirs() }
+    private val generationClient = GenerationClient()
+    private val syncManager = SyncManager(context)
+    private val prefs = context.getSharedPreferences("generation", Context.MODE_PRIVATE)
 
     fun getAllBooks(): Flow<List<Book>> = bookDao.getAll()
 
@@ -33,255 +32,209 @@ class BookRepository(private val context: Context) {
 
     suspend fun deleteBook(book: Book) = bookDao.softDelete(book.id)
 
-    /**
-     * Scales a photo to max 512px on the longest edge, saves to cache dir.
-     * Returns the scaled file, or null if the original doesn't exist.
-     */
-    private fun scalePhoto(originalPath: String, id: String): File? {
-        val original = File(originalPath)
-        if (!original.exists()) return null
-
-        return try {
-            val bitmap = BitmapFactory.decodeFile(original.absolutePath) ?: return null
-            val maxDim = 512
-            val scale = maxDim.toFloat() / maxOf(bitmap.width, bitmap.height)
-            val scaled = if (scale < 1f) {
-                Bitmap.createScaledBitmap(
-                    bitmap,
-                    (bitmap.width * scale).toInt(),
-                    (bitmap.height * scale).toInt(),
-                    true
-                )
-            } else {
-                bitmap
-            }
-
-            val outFile = File(scaledPhotosDir, "ref_$id.jpg")
-            outFile.outputStream().use { scaled.compress(Bitmap.CompressFormat.JPEG, 80, it) }
-            if (scaled !== bitmap) scaled.recycle()
-            bitmap.recycle()
-            outFile
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to scale photo: ${e.message}")
-            null
-        }
+    /** Generate a nanoid-style short random ID (21 chars, URL-safe). */
+    private fun generateId(): String {
+        val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
+        val random = SecureRandom()
+        return (1..21).map { alphabet[random.nextInt(alphabet.length)] }.joinToString("")
     }
 
-    /**
-     * Load selected characters and build CharacterRef list with scaled photos.
-     */
-    private suspend fun buildCharacterRefs(selectedCharacterIds: Set<Long>): List<CharacterRef> {
-        if (selectedCharacterIds.isEmpty()) return emptyList()
-        return selectedCharacterIds.mapNotNull { id ->
-            characterDao.getById(id)?.let { c ->
-                val description = buildString {
-                    val typeLabel = if (c.type == "family") "family member" else "friend"
-                    append("$typeLabel")
-                    if (c.notes.isNotBlank()) append(". ${c.notes}")
-                }
-                val scaledPhoto = c.photoPath?.let { scalePhoto(it, c.uuid) }
-                CharacterRef(name = c.name, description = description, photoFile = scaledPhoto)
-            }
-        }
+    /** Save active job for resume on app restart. */
+    private fun saveActiveJob(jobId: String, bookId: String) {
+        prefs.edit()
+            .putString("active_job_id", jobId)
+            .putString("active_book_id", bookId)
+            .apply()
     }
 
+    /** Clear saved job after completion or error. */
+    private fun clearActiveJob() {
+        prefs.edit()
+            .remove("active_job_id")
+            .remove("active_book_id")
+            .apply()
+    }
+
+    /** Get saved active job ID (for resuming after app restart). */
+    fun getActiveJobId(): String? = prefs.getString("active_job_id", null)
+    fun getActiveBookId(): String? = prefs.getString("active_book_id", null)
+
+    /**
+     * Generate a book via the server-side generation API.
+     * 1. Sync push characters (ensure photos are on server)
+     * 2. Submit generation request
+     * 3. Poll for status with progress callbacks
+     * 4. When done, sync pull to get the completed book locally
+     */
     suspend fun generateBook(
         description: String,
         pageCount: Int = 4,
         selectedCharacterIds: Set<Long> = emptySet(),
-        onProgress: (String) -> Unit,
+        onProgress: (String, Float) -> Unit,
         onFirstIllustration: ((String) -> Unit)? = null
     ): Long {
-        // Load characters and build references
-        val characterRefs = buildCharacterRefs(selectedCharacterIds)
-
-        // Build enriched description for story text generation (descriptions for context, not for narration)
-        val enrichedDescription = buildString {
-            append(description)
-            if (characterRefs.isNotEmpty()) {
-                append("\n\nCharacters to feature in the story:")
-                characterRefs.forEach { c ->
-                    append("\n- ${c.name} (${c.description})")
-                }
-            }
+        // Translate local IDs to server UUIDs
+        val characterUuids = selectedCharacterIds.mapNotNull { localId ->
+            characterDao.getUuidByLocalId(localId)
         }
 
-        // Generate story text (includes title)
-        onProgress("Writing story with AI...")
-        val storyResponse = apiClient.generateStory(enrichedDescription, pageCount)
-
-        // Create book entry with generated title
-        val book = Book(title = storyResponse.title, description = description)
-        val bookId = bookDao.insert(book)
-
+        // Ensure characters are synced to server (photos included)
+        onProgress("Syncing characters...", 0f)
         try {
-            // Save pages to DB
-            val pages = storyResponse.pages.map { sp ->
-                Page(
-                    bookId = bookId,
-                    pageNumber = sp.pageNumber,
-                    text = sp.text
-                )
-            }
-            pageDao.insertAll(pages)
-            onProgress("Story written! Generating illustrations...")
-
-            // Generate page 1 first as the style reference
-            val savedPages = pageDao.getPagesForBookOnce(bookId)
-            val firstPage = savedPages.first()
-            val firstImageFile = File(imagesDir, "book_${bookId}_page_${firstPage.pageNumber}.png")
-
-            onProgress("Drawing illustration 1 of ${savedPages.size}...")
-            pageDao.updateImageStatus(firstPage.id, Page.IMAGE_GENERATING)
-            val firstSuccess = apiClient.generateIllustration(firstPage.text, storyResponse.title, firstImageFile, null, characterRefs)
-            if (firstSuccess) {
-                pageDao.updateImage(firstPage.id, firstImageFile.absolutePath, Page.IMAGE_DONE)
-                onFirstIllustration?.invoke(firstImageFile.absolutePath)
-            } else {
-                pageDao.updateImageStatus(firstPage.id, Page.IMAGE_ERROR)
-            }
-
-            // Generate remaining pages + cover in parallel, all using page 1 as reference
-            val referenceImage = if (firstSuccess) firstImageFile else null
-            val remainingPages = savedPages.drop(1)
-            onProgress("Drawing illustrations 2-${savedPages.size} in parallel...")
-
-            coroutineScope {
-                val pageJobs = remainingPages.map { page ->
-                    async {
-                        val imageFile = File(imagesDir, "book_${bookId}_page_${page.pageNumber}.png")
-                        pageDao.updateImageStatus(page.id, Page.IMAGE_GENERATING)
-                        val success = apiClient.generateIllustration(page.text, storyResponse.title, imageFile, referenceImage, characterRefs)
-                        if (success) {
-                            pageDao.updateImage(page.id, imageFile.absolutePath, Page.IMAGE_DONE)
-                        } else {
-                            pageDao.updateImageStatus(page.id, Page.IMAGE_ERROR)
-                        }
-                    }
-                }
-
-                val coverJob = async {
-                    val coverFile = File(imagesDir, "book_${bookId}_cover.png")
-                    val coverSuccess = apiClient.generateCover(
-                        storyResponse.title, referenceImage ?: firstImageFile, coverFile
-                    )
-                    if (coverSuccess) {
-                        bookDao.updateCoverImagePath(bookId, coverFile.absolutePath)
-                    }
-                }
-
-                pageJobs.awaitAll()
-                coverJob.await()
-            }
-
-            bookDao.updateStatus(bookId, Book.STATUS_READY)
-            onProgress("Done! Syncing...")
-            SyncWorker.syncNow(context)
+            syncManager.sync()
         } catch (e: Exception) {
-            Log.e(TAG, "Book generation failed", e)
-            bookDao.updateStatus(bookId, Book.STATUS_ERROR)
-            onProgress("Error: ${e.message}")
-            throw e
+            Log.w(TAG, "Pre-generation sync failed: ${e.message}")
+            // Continue — characters may already be on server
         }
 
-        return bookId
+        // Generate a bookId client-side for idempotency
+        val bookId = generateId()
+
+        // Submit generation request
+        onProgress("Starting story generation...", 0.05f)
+        val response = generationClient.startGeneration(
+            GenerationRequest(
+                description = description,
+                pageCount = pageCount,
+                characterIds = characterUuids,
+                bookId = bookId
+            )
+        )
+
+        saveActiveJob(response.jobId, response.bookId)
+
+        // Poll for status
+        val localBookId = pollForCompletion(
+            jobId = response.jobId,
+            bookId = response.bookId,
+            onProgress = onProgress,
+            onFirstIllustration = onFirstIllustration
+        )
+
+        clearActiveJob()
+        return localBookId
     }
 
+    /**
+     * Poll a generation job until completion, updating progress callbacks.
+     * Returns the local book ID after sync pull.
+     */
+    suspend fun pollForCompletion(
+        jobId: String,
+        bookId: String,
+        onProgress: (String, Float) -> Unit,
+        onFirstIllustration: ((String) -> Unit)? = null
+    ): Long {
+        val syncClient = SyncClient()
+        var firstIllustrationShown = false
+        var pollCount = 0
+
+        while (true) {
+            val status = generationClient.pollStatus(jobId)
+            pollCount++
+
+            // Update progress
+            onProgress(
+                status.progressMessage ?: "Generating...",
+                status.progressFraction
+            )
+
+            // Show first illustration preview
+            if (status.firstIllustrationReady && !firstIllustrationShown &&
+                status.completedPageIds.isNotEmpty() && onFirstIllustration != null
+            ) {
+                firstIllustrationShown = true
+                // Download first page image directly for preview
+                val pageId = status.completedPageIds.first()
+                val previewUrl = syncClient.getPageImageUrl(pageId)
+                val previewFile = java.io.File(context.cacheDir, "preview_$pageId.png")
+                try {
+                    if (syncClient.downloadFile(previewUrl, previewFile)) {
+                        onFirstIllustration(previewFile.absolutePath)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to download preview: ${e.message}")
+                }
+            }
+
+            // Check terminal states
+            if (status.isDone) {
+                onProgress("Done! Syncing...", 1f)
+                syncManager.sync()
+                val localId = bookDao.getLocalIdByUuid(bookId)
+                    ?: throw Exception("Book not found after sync (uuid=$bookId)")
+                return localId
+            }
+
+            if (status.isError) {
+                clearActiveJob()
+                throw Exception(status.errorMessage ?: "Generation failed")
+            }
+
+            if (status.status == "cancelled") {
+                clearActiveJob()
+                throw Exception("Generation was cancelled")
+            }
+
+            // Adaptive polling: 2s for first 15 polls (~30s), then 5s
+            delay(if (pollCount < 15) 2000L else 5000L)
+        }
+    }
+
+    /**
+     * Regenerate illustrations for an existing book via the server.
+     */
     suspend fun regenerateIllustrations(
         bookId: Long,
-        onProgress: (String) -> Unit
+        onProgress: (String, Float) -> Unit
     ) {
-        val book = bookDao.getById(bookId) ?: return
-        val pages = pageDao.getPagesForBookOnce(bookId)
+        val bookUuid = bookDao.getUuidByLocalId(bookId)
+            ?: throw Exception("Book UUID not found for local ID $bookId")
 
-        // Find or generate page 1 as reference
-        val firstPage = pages.first()
-        val firstImageFile = File(imagesDir, "book_${bookId}_page_${firstPage.pageNumber}.png")
-        if (firstPage.imageStatus != Page.IMAGE_DONE || firstPage.imagePath == null) {
-            onProgress("Drawing illustration 1 of ${pages.size}...")
-            pageDao.updateImageStatus(firstPage.id, Page.IMAGE_GENERATING)
-            val success = apiClient.generateIllustration(firstPage.text, book.title, firstImageFile, null)
-            if (success) {
-                pageDao.updateImage(firstPage.id, firstImageFile.absolutePath, Page.IMAGE_DONE)
-            } else {
-                pageDao.updateImageStatus(firstPage.id, Page.IMAGE_ERROR)
-            }
-        }
+        onProgress("Starting illustration regeneration...", 0f)
+        val response = generationClient.regenerateIllustrations(bookUuid)
+        saveActiveJob(response.jobId, response.bookId)
 
-        val referenceImage = if (firstImageFile.exists()) firstImageFile else null
-        val remaining = pages.drop(1).filter { it.imageStatus != Page.IMAGE_DONE || it.imagePath == null }
-        val needsCover = book.coverImagePath == null
+        pollForCompletion(
+            jobId = response.jobId,
+            bookId = response.bookId,
+            onProgress = onProgress
+        )
 
-        if (remaining.isNotEmpty() || needsCover) {
-            onProgress("Drawing ${remaining.size} illustrations in parallel...")
-            coroutineScope {
-                val pageJobs = remaining.map { page ->
-                    async {
-                        val imageFile = File(imagesDir, "book_${bookId}_page_${page.pageNumber}.png")
-                        pageDao.updateImageStatus(page.id, Page.IMAGE_GENERATING)
-                        val success = apiClient.generateIllustration(page.text, book.title, imageFile, referenceImage)
-                        if (success) {
-                            pageDao.updateImage(page.id, imageFile.absolutePath, Page.IMAGE_DONE)
-                        } else {
-                            pageDao.updateImageStatus(page.id, Page.IMAGE_ERROR)
-                        }
-                    }
-                }
-
-                if (needsCover) {
-                    async {
-                        val coverFile = File(imagesDir, "book_${bookId}_cover.png")
-                        val firstPageImage = pages.first().imagePath?.let { File(it) }
-                        if (firstPageImage != null && firstPageImage.exists()) {
-                            val success = apiClient.generateCover(book.title, firstPageImage, coverFile)
-                            if (success) bookDao.updateCoverImagePath(bookId, coverFile.absolutePath)
-                        }
-                    }
-                }
-
-                pageJobs.awaitAll()
-            }
-        }
-        onProgress("Done!")
+        clearActiveJob()
     }
 
+    /**
+     * Regenerate covers for all ready books via the server.
+     */
     suspend fun regenerateCovers(
-        onProgress: (String) -> Unit
+        onProgress: (String, Float) -> Unit
     ) {
-        val books = bookDao.getAllReady()
-        onProgress("Regenerating covers for ${books.size} books...")
+        onProgress("Starting cover regeneration...", 0f)
+        val response = generationClient.regenerateCovers()
+        saveActiveJob(response.jobId, "covers")
 
-        coroutineScope {
-            val jobs = books.map { book ->
-                async {
-                    try {
-                        val pages = pageDao.getPagesForBookOnce(book.id)
-                        val firstPage = pages.firstOrNull() ?: return@async
-                        val firstPageFile = firstPage.imagePath?.let { File(it) }
-                        if (firstPageFile == null || !firstPageFile.exists()) {
-                            Log.w(TAG, "Skipping cover regen for '${book.title}': no page 1 image")
-                            return@async
-                        }
+        var pollCount = 0
+        while (true) {
+            val status = generationClient.pollStatus(response.jobId)
+            pollCount++
+            onProgress(
+                status.progressMessage ?: "Regenerating covers...",
+                status.progressFraction
+            )
 
-                        val coverFile = File(imagesDir, "book_${book.id}_cover.png")
-                        val success = apiClient.generateCover(book.title, firstPageFile, coverFile)
-                        if (success) {
-                            bookDao.updateCoverImagePath(book.id, coverFile.absolutePath)
-                            Log.d(TAG, "Regenerated cover for '${book.title}'")
-                        } else {
-                            Log.w(TAG, "Failed to regenerate cover for '${book.title}'")
-                        }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error regenerating cover for '${book.title}'", e)
-                    }
+            if (status.isTerminal) {
+                clearActiveJob()
+                if (status.isError) {
+                    throw Exception(status.errorMessage ?: "Cover regeneration failed")
                 }
+                onProgress("Done! Syncing...", 1f)
+                syncManager.sync()
+                return
             }
-            jobs.awaitAll()
-        }
 
-        onProgress("Cover regeneration complete! Syncing...")
-        SyncWorker.syncNow(context)
-        onProgress("Done!")
+            delay(if (pollCount < 15) 2000L else 5000L)
+        }
     }
 
     companion object {

@@ -39,7 +39,7 @@ class ReaderViewModel(
         _isRegenerating.value = true
         viewModelScope.launch {
             try {
-                repository.regenerateIllustrations(bookId) { progress ->
+                repository.regenerateIllustrations(bookId) { progress, _ ->
                     _progress.value = progress
                 }
             } finally {
