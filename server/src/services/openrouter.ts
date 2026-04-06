@@ -27,6 +27,22 @@ export interface StoryResponse {
   pages: StoryPage[];
 }
 
+/** Metadata returned from every generation call for debug logging */
+export interface GenerationResult<T = void> {
+  data: T;
+  model: string;
+  prompt: string;
+  systemPrompt: string | null;
+  responseText: string | null;
+  responseModel: string | null;
+  numImagesAttached: number;
+  hadReferenceImage: boolean;
+  characterRefsJson: string | null;
+  success: boolean;
+  errorMessage: string | null;
+  durationMs: number;
+}
+
 interface ChatMessage {
   role: string;
   content: any;
@@ -100,6 +116,10 @@ async function makeRequest(request: ChatRequest): Promise<any> {
   return JSON.parse(responseBody);
 }
 
+function extractResponseModel(responseJson: any): string | null {
+  return responseJson?.model || null;
+}
+
 function extractImageData(responseJson: any): Buffer | null {
   try {
     const choices = responseJson.choices;
@@ -157,7 +177,7 @@ function parseStoryResponse(content: string): StoryResponse {
 export async function generateStory(
   description: string,
   pageCount: number
-): Promise<StoryResponse> {
+): Promise<GenerationResult<StoryResponse>> {
   const systemPrompt = `You are a children's storybook author. Write a short, engaging story for young children (ages 3-7).
 
 Rules:
@@ -173,21 +193,54 @@ Example: {"title": "The Brave Little Fox", "pages": [{"pageNumber": 1, "text": "
 
 Return ONLY the JSON object, no other text.`;
 
-  const response = await makeRequest({
-    model: STORY_MODEL,
-    messages: [
-      { role: "system", content: systemPrompt },
-      {
-        role: "user",
-        content: `Write a children's story based on this idea: ${description}`,
+  const userPrompt = `Write a children's story based on this idea: ${description}`;
+  const startTime = Date.now();
+
+  try {
+    const response = await makeRequest({
+      model: STORY_MODEL,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    });
+
+    const content = response.choices?.[0]?.message?.content;
+    if (!content) throw new Error("No response from LLM");
+
+    const story = parseStoryResponse(content);
+
+    return {
+      data: story,
+      model: STORY_MODEL,
+      prompt: userPrompt,
+      systemPrompt,
+      responseText: content,
+      responseModel: extractResponseModel(response),
+      numImagesAttached: 0,
+      hadReferenceImage: false,
+      characterRefsJson: null,
+      success: true,
+      errorMessage: null,
+      durationMs: Date.now() - startTime,
+    };
+  } catch (e: any) {
+    throw Object.assign(e, {
+      generationMeta: {
+        model: STORY_MODEL,
+        prompt: userPrompt,
+        systemPrompt,
+        responseText: null,
+        responseModel: null,
+        numImagesAttached: 0,
+        hadReferenceImage: false,
+        characterRefsJson: null,
+        success: false,
+        errorMessage: e.message || "Unknown error",
+        durationMs: Date.now() - startTime,
       },
-    ],
-  });
-
-  const content = response.choices?.[0]?.message?.content;
-  if (!content) throw new Error("No response from LLM");
-
-  return parseStoryResponse(content);
+    });
+  }
 }
 
 export async function generateIllustration(
@@ -196,39 +249,50 @@ export async function generateIllustration(
   outputPath: string,
   previousImagePath: string | null,
   characters: CharacterRef[]
-): Promise<boolean> {
+): Promise<GenerationResult<boolean>> {
+  const uploadsDir = getUploadsDir();
+  const startTime = Date.now();
+  let numImagesAttached = 0;
+
+  // Build prompt
+  let prompt = `Generate an illustration for a children's storybook page.\n\n`;
+  prompt += `Book title: "${bookTitle}"\n`;
+  prompt += `Page text: "${pageText}"\n\n`;
+
+  if (characters.length > 0) {
+    prompt += `Characters in this story (reference photos attached where available):\n`;
+    characters.forEach((c, i) => {
+      prompt += `- ${c.name}: ${c.description}`;
+      if (c.photoPath && fs.existsSync(path.join(uploadsDir, c.photoPath))) {
+        prompt += ` [see reference photo ${i + 1}]`;
+      }
+      prompt += `\n`;
+    });
+    prompt += `\nDraw these characters to resemble their reference photos — `;
+    prompt += `capture their key features, coloring, and proportions in the illustration style.\n\n`;
+  }
+
+  const hadReferenceImage =
+    previousImagePath != null && fs.existsSync(previousImagePath);
+  if (hadReferenceImage) {
+    prompt += `I've attached the previous page's illustration. `;
+    prompt += `Keep a consistent art style, color palette, and character designs.\n\n`;
+  }
+
+  prompt += `Style: Sharp pen and ink illustration with bold lines. `;
+  prompt += `Use a limited palette of 6 highly saturated colors suitable for a color e-ink display. `;
+  prompt += `The illustration should be simple, clear, and appealing to young children.\n\n`;
+  prompt += `IMPORTANT: The image must be horizontal/landscape orientation.\n\n`;
+  prompt += `IMPORTANT: Do NOT include any text, words, letters, numbers, captions, titles, labels, or writing of any kind in the image. The image must contain only visual artwork with zero text.`;
+
+  const characterRefsJson =
+    characters.length > 0
+      ? JSON.stringify(
+          characters.map((c) => ({ name: c.name, description: c.description }))
+        )
+      : null;
+
   try {
-    const uploadsDir = getUploadsDir();
-
-    // Build prompt
-    let prompt = `Generate an illustration for a children's storybook page.\n\n`;
-    prompt += `Book title: "${bookTitle}"\n`;
-    prompt += `Page text: "${pageText}"\n\n`;
-
-    if (characters.length > 0) {
-      prompt += `Characters in this story (reference photos attached where available):\n`;
-      characters.forEach((c, i) => {
-        prompt += `- ${c.name}: ${c.description}`;
-        if (c.photoPath && fs.existsSync(path.join(uploadsDir, c.photoPath))) {
-          prompt += ` [see reference photo ${i + 1}]`;
-        }
-        prompt += `\n`;
-      });
-      prompt += `\nDraw these characters to resemble their reference photos — `;
-      prompt += `capture their key features, coloring, and proportions in the illustration style.\n\n`;
-    }
-
-    if (previousImagePath && fs.existsSync(previousImagePath)) {
-      prompt += `I've attached the previous page's illustration. `;
-      prompt += `Keep a consistent art style, color palette, and character designs.\n\n`;
-    }
-
-    prompt += `Style: Sharp pen and ink illustration with bold lines. `;
-    prompt += `Use a limited palette of 6 highly saturated colors suitable for a color e-ink display. `;
-    prompt += `The illustration should be simple, clear, and appealing to young children.\n\n`;
-    prompt += `IMPORTANT: The image must be horizontal/landscape orientation.\n\n`;
-    prompt += `IMPORTANT: Do NOT include any text, words, letters, numbers, captions, titles, labels, or writing of any kind in the image. The image must contain only visual artwork with zero text.`;
-
     // Build multimodal content: character photos first, then previous page, then text
     const parts: Record<string, any>[] = [];
 
@@ -238,13 +302,17 @@ export async function generateIllustration(
         if (fs.existsSync(fullPath)) {
           const scaled = await scalePhoto(fullPath);
           parts.push(fileToBase64Part(scaled, "image/jpeg"));
+          numImagesAttached++;
         }
       }
     }
 
-    if (previousImagePath && fs.existsSync(previousImagePath)) {
-      const prevPart = await buildImagePart(previousImagePath);
-      if (prevPart) parts.push(prevPart);
+    if (hadReferenceImage) {
+      const prevPart = await buildImagePart(previousImagePath!);
+      if (prevPart) {
+        parts.push(prevPart);
+        numImagesAttached++;
+      }
     }
 
     parts.push({ type: "text", text: prompt });
@@ -258,14 +326,53 @@ export async function generateIllustration(
     if (imageBuffer) {
       await fs.promises.writeFile(outputPath, imageBuffer);
       console.log(`Saved illustration to ${outputPath}`);
-      return true;
+      return {
+        data: true,
+        model: ILLUSTRATION_MODEL,
+        prompt,
+        systemPrompt: null,
+        responseText: null,
+        responseModel: extractResponseModel(response),
+        numImagesAttached,
+        hadReferenceImage,
+        characterRefsJson,
+        success: true,
+        errorMessage: null,
+        durationMs: Date.now() - startTime,
+      };
     }
 
     console.warn("No image data in illustration response");
-    return false;
-  } catch (e) {
+    return {
+      data: false,
+      model: ILLUSTRATION_MODEL,
+      prompt,
+      systemPrompt: null,
+      responseText: null,
+      responseModel: extractResponseModel(response),
+      numImagesAttached,
+      hadReferenceImage,
+      characterRefsJson,
+      success: false,
+      errorMessage: "No image data in response",
+      durationMs: Date.now() - startTime,
+    };
+  } catch (e: any) {
     console.error("Illustration generation error:", e);
-    return false;
+    return {
+      data: false,
+      model: ILLUSTRATION_MODEL,
+      prompt,
+      systemPrompt: null,
+      responseText: null,
+      responseModel: null,
+      numImagesAttached,
+      hadReferenceImage,
+      characterRefsJson,
+      success: false,
+      errorMessage: e.message || "Unknown error",
+      durationMs: Date.now() - startTime,
+    };
   }
 }
 
@@ -273,20 +380,27 @@ export async function generateCover(
   title: string,
   firstPageImagePath: string,
   outputPath: string
-): Promise<boolean> {
-  try {
-    const prompt =
-      `Use this image as the basis for generating a book cover ` +
-      `with the title "${title}". You have artistic license to be ` +
-      `creative with typography but keep the same basic content concepts. ` +
-      `Ratio should be 3:2 portrait orientation.`;
+): Promise<GenerationResult<boolean>> {
+  const startTime = Date.now();
+  const prompt =
+    `Use this image as the basis for generating a book cover ` +
+    `with the title "${title}". You have artistic license to be ` +
+    `creative with typography but keep the same basic content concepts. ` +
+    `Ratio should be 3:2 portrait orientation.`;
 
+  let numImagesAttached = 0;
+  const hadReferenceImage = fs.existsSync(firstPageImagePath);
+
+  try {
     const parts: Record<string, any>[] = [];
     parts.push({ type: "text", text: prompt });
 
-    if (fs.existsSync(firstPageImagePath)) {
+    if (hadReferenceImage) {
       const imagePart = await buildImagePart(firstPageImagePath);
-      if (imagePart) parts.push(imagePart);
+      if (imagePart) {
+        parts.push(imagePart);
+        numImagesAttached++;
+      }
     }
 
     const response = await makeRequest({
@@ -299,13 +413,52 @@ export async function generateCover(
     if (imageBuffer) {
       await fs.promises.writeFile(outputPath, imageBuffer);
       console.log(`Saved cover to ${outputPath}`);
-      return true;
+      return {
+        data: true,
+        model: COVER_MODEL,
+        prompt,
+        systemPrompt: null,
+        responseText: null,
+        responseModel: extractResponseModel(response),
+        numImagesAttached,
+        hadReferenceImage,
+        characterRefsJson: null,
+        success: true,
+        errorMessage: null,
+        durationMs: Date.now() - startTime,
+      };
     }
 
     console.warn("No image data in cover response");
-    return false;
-  } catch (e) {
+    return {
+      data: false,
+      model: COVER_MODEL,
+      prompt,
+      systemPrompt: null,
+      responseText: null,
+      responseModel: extractResponseModel(response),
+      numImagesAttached,
+      hadReferenceImage,
+      characterRefsJson: null,
+      success: false,
+      errorMessage: "No image data in response",
+      durationMs: Date.now() - startTime,
+    };
+  } catch (e: any) {
     console.error("Cover generation error:", e);
-    return false;
+    return {
+      data: false,
+      model: COVER_MODEL,
+      prompt,
+      systemPrompt: null,
+      responseText: null,
+      responseModel: null,
+      numImagesAttached,
+      hadReferenceImage,
+      characterRefsJson: null,
+      success: false,
+      errorMessage: e.message || "Unknown error",
+      durationMs: Date.now() - startTime,
+    };
   }
 }

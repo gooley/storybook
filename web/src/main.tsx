@@ -5,6 +5,7 @@ import { Characters } from "./pages/Characters";
 import { Books } from "./pages/Books";
 import { CreateBook } from "./pages/CreateBook";
 import { Reader } from "./pages/Reader";
+import { BookDebug } from "./pages/BookDebug";
 import "./index.css";
 
 function App() {
@@ -25,6 +26,7 @@ function App() {
             <Route path="/create" element={<CreateBook />} />
             <Route path="/characters" element={<Characters />} />
             <Route path="/reader/:bookId" element={<Reader />} />
+            <Route path="/reader/:bookId/debug" element={<BookDebug />} />
           </Routes>
         </main>
       </div>

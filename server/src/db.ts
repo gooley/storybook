@@ -85,6 +85,29 @@ export function migrate(): void {
 
     CREATE INDEX IF NOT EXISTS idx_generation_jobs_status ON generation_jobs(status);
     CREATE INDEX IF NOT EXISTS idx_generation_jobs_updated ON generation_jobs(updated_at);
+
+    CREATE TABLE IF NOT EXISTS generation_logs (
+      id TEXT PRIMARY KEY,
+      job_id TEXT,
+      book_id TEXT,
+      page_id TEXT,
+      step_type TEXT NOT NULL,
+      model TEXT NOT NULL,
+      prompt TEXT NOT NULL,
+      system_prompt TEXT,
+      character_refs_json TEXT,
+      num_images_attached INTEGER DEFAULT 0,
+      had_reference_image INTEGER DEFAULT 0,
+      response_text TEXT,
+      response_model TEXT,
+      success INTEGER NOT NULL DEFAULT 0,
+      error_message TEXT,
+      duration_ms INTEGER,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_generation_logs_book ON generation_logs(book_id);
+    CREATE INDEX IF NOT EXISTS idx_generation_logs_job ON generation_logs(job_id);
   `);
 
   // Startup recovery: mark orphaned in-progress jobs as error

@@ -99,3 +99,27 @@ export const pollGenerationStatus = (jobId: string) =>
 
 export const getActiveGenerationJobs = () =>
   request<GenerationStatus[]>("/generate/active");
+
+// Generation logs
+export interface GenerationLog {
+  id: string;
+  job_id: string | null;
+  book_id: string | null;
+  page_id: string | null;
+  step_type: "story" | "illustration" | "cover";
+  model: string;
+  prompt: string;
+  system_prompt: string | null;
+  character_refs_json: string | null;
+  num_images_attached: number;
+  had_reference_image: number;
+  response_text: string | null;
+  response_model: string | null;
+  success: number;
+  error_message: string | null;
+  duration_ms: number | null;
+  created_at: number;
+}
+
+export const getBookGenerationLogs = (bookId: string) =>
+  request<GenerationLog[]>(`/books/${bookId}/generation-logs`);
