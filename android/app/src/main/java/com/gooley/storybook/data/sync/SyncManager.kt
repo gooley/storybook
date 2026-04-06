@@ -141,6 +141,7 @@ class SyncManager(
                         title = sb.title,
                         description = sb.description,
                         status = sb.status,
+                        hidden = sb.hidden != 0,
                         updatedAt = sb.updatedAt,
                         deletedAt = sb.deletedAt,
                         dirty = false
@@ -155,6 +156,7 @@ class SyncManager(
                     title = sb.title,
                     description = sb.description,
                     status = sb.status,
+                    hidden = sb.hidden != 0,
                     createdAt = sb.createdAt,
                     updatedAt = sb.updatedAt,
                     dirty = false
@@ -251,6 +253,7 @@ class SyncManager(
         description = description,
         coverImagePath = null, // Images uploaded separately
         status = status,
+        hidden = if (hidden) 1 else 0,
         createdAt = createdAt,
         updatedAt = updatedAt,
         deletedAt = deletedAt

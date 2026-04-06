@@ -15,10 +15,10 @@ interface BookDao {
     @Update
     suspend fun update(book: Book)
 
-    @Query("SELECT * FROM books WHERE deletedAt IS NULL ORDER BY createdAt DESC")
+    @Query("SELECT * FROM books WHERE deletedAt IS NULL AND hidden = 0 ORDER BY createdAt DESC")
     fun getAll(): Flow<List<Book>>
 
-    @Query("SELECT * FROM books WHERE deletedAt IS NULL AND status = 'ready' ORDER BY createdAt DESC")
+    @Query("SELECT * FROM books WHERE deletedAt IS NULL AND hidden = 0 AND status = 'ready' ORDER BY createdAt DESC")
     suspend fun getAllReady(): List<Book>
 
     @Query("SELECT * FROM books WHERE id = :id AND deletedAt IS NULL")

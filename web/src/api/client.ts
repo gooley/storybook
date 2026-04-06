@@ -30,6 +30,7 @@ export interface Book {
   description: string;
   cover_image_path: string | null;
   status: string;
+  hidden: number;
   created_at: number;
   updated_at: number;
   page_count?: number;
@@ -77,6 +78,8 @@ export async function uploadCharacterPhoto(id: string, file: File): Promise<{ ph
 
 export const getCharacterPhotoUrl = (id: string) => `${BASE}/characters/${id}/photo`;
 export const getBooks = () => request<Book[]>("/books");
+export const updateBook = (id: string, data: Partial<Book>) =>
+  request<Book>(`/books/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const getBook = (id: string) => request<Book>(`/books/${id}`);
 export const getBookPages = (id: string) => request<Page[]>(`/books/${id}/pages`);
 export const getBookCoverUrl = (id: string) => `${BASE}/books/${id}/cover`;

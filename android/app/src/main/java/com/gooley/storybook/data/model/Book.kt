@@ -14,6 +14,7 @@ data class Book(
     val description: String,
     val coverImagePath: String? = null,
     val status: String = STATUS_GENERATING,
+    val hidden: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val dirty: Boolean = true,

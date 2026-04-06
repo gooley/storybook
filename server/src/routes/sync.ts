@@ -49,12 +49,13 @@ router.post("/push", (req: Request, res: Response) => {
   );
 
   const upsertBook = db.prepare(
-    `INSERT INTO books (id, title, description, cover_image_path, status, created_at, updated_at, deleted_at)
-     VALUES (@id, @title, @description, @cover_image_path, @status, @created_at, @updated_at, @deleted_at)
+    `INSERT INTO books (id, title, description, cover_image_path, status, hidden, created_at, updated_at, deleted_at)
+     VALUES (@id, @title, @description, @cover_image_path, @status, @hidden, @created_at, @updated_at, @deleted_at)
      ON CONFLICT(id) DO UPDATE SET
        title = CASE WHEN excluded.updated_at > books.updated_at THEN excluded.title ELSE books.title END,
        description = CASE WHEN excluded.updated_at > books.updated_at THEN excluded.description ELSE books.description END,
        status = CASE WHEN excluded.updated_at > books.updated_at THEN excluded.status ELSE books.status END,
+       hidden = CASE WHEN excluded.updated_at > books.updated_at THEN excluded.hidden ELSE books.hidden END,
        updated_at = MAX(excluded.updated_at, books.updated_at),
        deleted_at = CASE WHEN excluded.updated_at > books.updated_at THEN excluded.deleted_at ELSE books.deleted_at END`
   );
@@ -95,6 +96,7 @@ router.post("/push", (req: Request, res: Response) => {
           description: b.description || "",
           cover_image_path: b.cover_image_path || null,
           status: b.status || "ready",
+          hidden: b.hidden || 0,
           created_at: b.created_at || Date.now(),
           updated_at: b.updated_at || Date.now(),
           deleted_at: b.deleted_at || null,
