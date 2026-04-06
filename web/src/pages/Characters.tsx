@@ -132,7 +132,7 @@ function FormModal({ character, onSave, onClose }: {
         <form onSubmit={handleSubmit}>
           <div className="photo-upload">
             {photoPreview ? <img src={photoPreview} alt="Preview" /> : <span className="photo-upload-label">📷 Add Photo</span>}
-            <input type="file" accept="image/*" capture="environment" onChange={handlePhotoChange} />
+            <input type="file" accept="image/*" onChange={handlePhotoChange} />
           </div>
           <div className="form-group">
             <label>Name</label>
