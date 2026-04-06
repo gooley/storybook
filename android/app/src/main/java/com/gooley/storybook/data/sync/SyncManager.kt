@@ -182,6 +182,13 @@ class SyncManager(
                     if (sp.imagePath != null && sp.deletedAt == null) {
                         downloadPageImage(sp.id, bookLocalId, sp.pageNumber)
                     }
+                } else if (sp.imagePath != null && existing.imageStatus == Page.IMAGE_DONE) {
+                    // Repair: re-download if local file is missing
+                    val localFile = existing.imagePath?.let { File(it) }
+                    if (localFile == null || !localFile.exists()) {
+                        Log.d(TAG, "Repairing missing image for page ${sp.id}")
+                        downloadPageImage(sp.id, bookLocalId, sp.pageNumber)
+                    }
                 }
             } else if (sp.deletedAt == null) {
                 val localId = pageDao.insert(Page(

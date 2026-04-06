@@ -1,5 +1,6 @@
 package com.gooley.storybook.ui.create
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gooley.storybook.data.db.CharacterDao
@@ -36,6 +37,46 @@ class CreateBookViewModel(
             val characters = characterDao.getAll().first()
             _uiState.value = _uiState.value.copy(availableCharacters = characters)
         }
+        // Resume active job if app was restarted
+        checkForActiveJob()
+    }
+
+    private fun checkForActiveJob() {
+        val jobId = repository.getActiveJobId() ?: return
+        val bookId = repository.getActiveBookId() ?: return
+
+        _uiState.value = _uiState.value.copy(
+            isGenerating = true,
+            progress = "Resuming generation..."
+        )
+
+        viewModelScope.launch {
+            try {
+                val localBookId = repository.pollForCompletion(
+                    jobId = jobId,
+                    bookId = bookId,
+                    onProgress = { message, fraction ->
+                        _uiState.value = _uiState.value.copy(
+                            progress = message,
+                            progressFraction = fraction
+                        )
+                    },
+                    onFirstIllustration = { path ->
+                        _uiState.value = _uiState.value.copy(firstIllustrationPath = path)
+                    }
+                )
+                _uiState.value = _uiState.value.copy(
+                    isGenerating = false,
+                    createdBookId = localBookId
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Resume polling failed", e)
+                _uiState.value = _uiState.value.copy(
+                    isGenerating = false,
+                    error = e.message ?: "Generation failed"
+                )
+            }
+        }
     }
 
     fun updateDescription(description: String) {
@@ -62,17 +103,14 @@ class CreateBookViewModel(
 
         viewModelScope.launch {
             try {
-                val totalSteps = state.pageCount + 2 // story + first illus + remaining + cover
-                var currentStep = 0
                 val bookId = repository.generateBook(
                     description = state.description,
                     pageCount = state.pageCount,
                     selectedCharacterIds = state.selectedCharacterIds,
-                    onProgress = { progress ->
-                        currentStep++
+                    onProgress = { message, fraction ->
                         _uiState.value = _uiState.value.copy(
-                            progress = progress,
-                            progressFraction = (currentStep.toFloat() / totalSteps).coerceIn(0f, 1f)
+                            progress = message,
+                            progressFraction = fraction
                         )
                     },
                     onFirstIllustration = { path ->
@@ -90,5 +128,9 @@ class CreateBookViewModel(
                 )
             }
         }
+    }
+
+    companion object {
+        private const val TAG = "CreateBookViewModel"
     }
 }
