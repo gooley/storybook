@@ -1,14 +1,15 @@
-import "dotenv/config";
+import path from "path";
+import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
-import path from "path";
 import { migrate } from "./db";
-import { authMiddleware } from "./middleware/auth";
 import charactersRouter from "./routes/characters";
 import booksRouter from "./routes/books";
 import syncRouter from "./routes/sync";
 import generateRouter from "./routes/generate";
 import { startWorker, stopWorker } from "./services/generation";
+
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
@@ -34,7 +35,6 @@ process.on("SIGINT", () => {
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
-app.use(authMiddleware);
 
 // API routes
 app.get("/api/healthz", (_req, res) => {

@@ -16,7 +16,6 @@ import java.util.concurrent.TimeUnit
 
 class SyncClient {
     private val baseUrl = BuildConfig.SYNC_API_URL.trimEnd('/')
-    private val apiKey = BuildConfig.SYNC_API_KEY
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -26,13 +25,12 @@ class SyncClient {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun isConfigured(): Boolean = baseUrl.isNotEmpty() && apiKey.isNotEmpty()
+    fun isConfigured(): Boolean = baseUrl.isNotEmpty()
 
     suspend fun pushChanges(request: SyncPushRequest): SyncPushResponse = withContext(Dispatchers.IO) {
         val body = json.encodeToString(SyncPushRequest.serializer(), request)
         val httpRequest = Request.Builder()
             .url("$baseUrl/api/sync/push")
-            .addHeader("Authorization", "Bearer $apiKey")
             .post(body.toRequestBody("application/json".toMediaType()))
             .build()
 
@@ -45,7 +43,6 @@ class SyncClient {
     suspend fun pullChanges(since: Long): SyncPullResponse = withContext(Dispatchers.IO) {
         val httpRequest = Request.Builder()
             .url("$baseUrl/api/sync/changes?since=$since")
-            .addHeader("Authorization", "Bearer $apiKey")
             .get()
             .build()
 
@@ -71,7 +68,6 @@ class SyncClient {
         try {
             val httpRequest = Request.Builder()
                 .url(url)
-                .addHeader("Authorization", "Bearer $apiKey")
                 .get()
                 .build()
 
@@ -102,7 +98,6 @@ class SyncClient {
 
             val request = Request.Builder()
                 .url(url)
-                .addHeader("Authorization", "Bearer $apiKey")
                 .post(body)
                 .build()
 

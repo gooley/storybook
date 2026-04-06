@@ -2,7 +2,10 @@ import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", "data");
+const REPO_ROOT = path.resolve(__dirname, "../..");
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(REPO_ROOT, process.env.DATA_DIR)
+  : path.join(__dirname, "..", "data");
 const DB_PATH = path.join(DATA_DIR, "storybook.db");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });

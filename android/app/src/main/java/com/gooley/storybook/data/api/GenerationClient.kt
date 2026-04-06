@@ -13,7 +13,6 @@ import java.util.concurrent.TimeUnit
 
 class GenerationClient {
     private val baseUrl = BuildConfig.SYNC_API_URL.trimEnd('/')
-    private val apiKey = BuildConfig.SYNC_API_KEY
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -28,7 +27,6 @@ class GenerationClient {
             val body = json.encodeToString(GenerationRequest.serializer(), request)
             val httpRequest = Request.Builder()
                 .url("$baseUrl/api/generate/book")
-                .addHeader("Authorization", "Bearer $apiKey")
                 .addHeader("Content-Type", "application/json")
                 .post(body.toRequestBody("application/json".toMediaType()))
                 .build()
@@ -45,7 +43,6 @@ class GenerationClient {
         withContext(Dispatchers.IO) {
             val httpRequest = Request.Builder()
                 .url("$baseUrl/api/generate/$jobId/status")
-                .addHeader("Authorization", "Bearer $apiKey")
                 .get()
                 .build()
 
@@ -61,7 +58,6 @@ class GenerationClient {
         withContext(Dispatchers.IO) {
             val httpRequest = Request.Builder()
                 .url("$baseUrl/api/generate/active")
-                .addHeader("Authorization", "Bearer $apiKey")
                 .get()
                 .build()
 
@@ -77,7 +73,6 @@ class GenerationClient {
         withContext(Dispatchers.IO) {
             val httpRequest = Request.Builder()
                 .url("$baseUrl/api/generate/$jobId/cancel")
-                .addHeader("Authorization", "Bearer $apiKey")
                 .post("".toRequestBody("application/json".toMediaType()))
                 .build()
 
@@ -91,7 +86,6 @@ class GenerationClient {
         withContext(Dispatchers.IO) {
             val httpRequest = Request.Builder()
                 .url("$baseUrl/api/generate/$bookUuid/regenerate-illustrations")
-                .addHeader("Authorization", "Bearer $apiKey")
                 .post("".toRequestBody("application/json".toMediaType()))
                 .build()
 
@@ -107,7 +101,6 @@ class GenerationClient {
         withContext(Dispatchers.IO) {
             val httpRequest = Request.Builder()
                 .url("$baseUrl/api/generate/regenerate-covers")
-                .addHeader("Authorization", "Bearer $apiKey")
                 .post("".toRequestBody("application/json".toMediaType()))
                 .build()
 
