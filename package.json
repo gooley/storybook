@@ -1,0 +1,12 @@
+{
+  "name": "storybook",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,green \"npm run dev -w server\" \"npm run dev -w web\"",
+    "build": "npm run build -w server && npm run build -w web"
+  },
+  "workspaces": ["server", "web"],
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
