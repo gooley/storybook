@@ -35,7 +35,11 @@ class CreateBookViewModel(
     init {
         viewModelScope.launch {
             val characters = characterDao.getAll().first()
-            _uiState.value = _uiState.value.copy(availableCharacters = characters)
+            val defaultIds = characters.filter { it.includeByDefault }.map { it.id }.toSet()
+            _uiState.value = _uiState.value.copy(
+                availableCharacters = characters,
+                selectedCharacterIds = defaultIds
+            )
         }
         // Resume active job if app was restarted
         checkForActiveJob()

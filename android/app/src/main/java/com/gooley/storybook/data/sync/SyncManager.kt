@@ -106,6 +106,7 @@ class SyncManager(
                         name = sc.name,
                         type = sc.type,
                         notes = sc.notes,
+                        includeByDefault = sc.includeByDefault != 0,
                         updatedAt = sc.updatedAt,
                         deletedAt = sc.deletedAt,
                         dirty = false
@@ -122,6 +123,7 @@ class SyncManager(
                     name = sc.name,
                     type = sc.type,
                     notes = sc.notes,
+                    includeByDefault = sc.includeByDefault != 0,
                     createdAt = sc.createdAt,
                     updatedAt = sc.updatedAt,
                     dirty = false
@@ -280,6 +282,7 @@ class SyncManager(
         type = type,
         notes = notes,
         photoPath = null,
+        includeByDefault = if (includeByDefault) 1 else 0,
         createdAt = createdAt,
         updatedAt = updatedAt,
         deletedAt = deletedAt

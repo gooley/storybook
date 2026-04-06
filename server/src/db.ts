@@ -32,6 +32,7 @@ export function migrate(): void {
       type TEXT NOT NULL DEFAULT 'family',
       notes TEXT NOT NULL DEFAULT '',
       photo_path TEXT,
+      include_by_default INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       deleted_at INTEGER
@@ -114,6 +115,13 @@ export function migrate(): void {
   // Migration: add hidden column to books (safe to run on existing DBs)
   try {
     db.exec("ALTER TABLE books ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0");
+  } catch (_) {
+    // Column already exists
+  }
+
+  // Migration: add include_by_default column to characters
+  try {
+    db.exec("ALTER TABLE characters ADD COLUMN include_by_default INTEGER NOT NULL DEFAULT 0");
   } catch (_) {
     // Column already exists
   }

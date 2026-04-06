@@ -51,20 +51,21 @@ router.get("/:id", (req: Request, res: Response) => {
 
 // Create character
 router.post("/", (req: Request, res: Response) => {
-  const { id, name, type, notes, created_at, updated_at } = req.body;
+  const { id, name, type, notes, include_by_default, created_at, updated_at } = req.body;
   const now = Date.now();
   const character = {
     id: id || uuidv4(),
     name,
     type: type || "family",
     notes: notes || "",
+    include_by_default: include_by_default ? 1 : 0,
     created_at: created_at || now,
     updated_at: updated_at || now,
   };
 
   db.prepare(
-    `INSERT INTO characters (id, name, type, notes, created_at, updated_at)
-     VALUES (@id, @name, @type, @notes, @created_at, @updated_at)`
+    `INSERT INTO characters (id, name, type, notes, include_by_default, created_at, updated_at)
+     VALUES (@id, @name, @type, @notes, @include_by_default, @created_at, @updated_at)`
   ).run(character);
 
   res.status(201).json(
@@ -82,13 +83,14 @@ router.put("/:id", (req: Request, res: Response) => {
     return;
   }
 
-  const { name, type, notes, updated_at } = req.body;
+  const { name, type, notes, include_by_default, updated_at } = req.body;
   db.prepare(
-    `UPDATE characters SET name = ?, type = ?, notes = ?, updated_at = ? WHERE id = ?`
+    `UPDATE characters SET name = ?, type = ?, notes = ?, include_by_default = ?, updated_at = ? WHERE id = ?`
   ).run(
     name ?? (existing as any).name,
     type ?? (existing as any).type,
     notes ?? (existing as any).notes,
+    include_by_default != null ? (include_by_default ? 1 : 0) : (existing as any).include_by_default,
     updated_at || Date.now(),
     req.params.id
   );

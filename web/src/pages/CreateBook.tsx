@@ -33,7 +33,11 @@ export function CreateBook() {
 
   const loadCharacters = useCallback(async () => {
     try {
-      setCharacters(await getCharacters());
+      const chars = await getCharacters();
+      setCharacters(chars);
+      // Pre-select characters marked as include_by_default
+      const defaultIds = new Set(chars.filter((c) => c.include_by_default).map((c) => c.id));
+      setSelectedIds(defaultIds);
     } finally {
       setLoading(false);
     }
