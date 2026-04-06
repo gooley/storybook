@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: deploy-storybook
+  cancel-in-progress: false
+
 permissions:
   id-token: write
   contents: read
@@ -11,6 +15,7 @@ permissions:
 env:
   AWS_REGION: us-east-1
   ECR_URI: 943179516876.dkr.ecr.us-east-1.amazonaws.com/gool3yhost
+  APP_DIR: /opt/gool3yhost/apps/storybook
 
 jobs:
   deploy:
@@ -22,20 +27,132 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::943179516876:role/gool3yhost-github-actions
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
         run: aws ecr get-login-password | docker login --username AWS --password-stdin $ECR_URI
 
       - name: Build and push
         run: |
-          docker build -t $ECR_URI:storybook-${{ github.sha }} .
+          docker build \
+            --platform linux/amd64 \
+            -t $ECR_URI:storybook-${{ github.sha }} \
+            -t $ECR_URI:storybook-latest \
+            .
           docker push $ECR_URI:storybook-${{ github.sha }}
+          docker push $ECR_URI:storybook-latest
+
+      - name: Resolve target instance
+        id: target
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:gool3yhost,Values=true" "Name=instance-state-name,Values=running" \
+            --query 'Reservations[0].Instances[0].InstanceId' \
+            --output text --region ${{ env.AWS_REGION }})
+          echo "Instance ID: $INSTANCE_ID"
+          if [ "$INSTANCE_ID" = "None" ] || [ -z "$INSTANCE_ID" ]; then
+            echo "::error::No running instance found with tag gool3yhost=true"
+            exit 1
+          fi
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Sync compose file to host
+        run: |
+          INSTANCE_ID="${{ steps.target.outputs.instance_id }}"
+          COMPOSE_B64=$(base64 -w0 docker-compose.yml)
+          COMMAND_ID=$(aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --instance-ids "$INSTANCE_ID" \
+            --parameters "commands=[\"set -e && mkdir -p ${{ env.APP_DIR }} && echo $COMPOSE_B64 | base64 -d > ${{ env.APP_DIR }}/docker-compose.yml && echo 'Files synced'\"]" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Command.CommandId' --output text)
+          for i in $(seq 1 15); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+              --region ${{ env.AWS_REGION }} --output json 2>&1 | \
+              python3 -c "import json,sys; print(json.load(sys.stdin).get('Status','Pending'))" 2>/dev/null || echo "Pending")
+            if [ "$STATUS" = "Success" ]; then echo "Compose file synced"; break; fi
+            if [ "$STATUS" = "Failed" ]; then echo "::error::File sync failed"; exit 1; fi
+            sleep 5
+          done
 
       - name: Deploy via SSM
         run: |
-          aws ssm send-command \
+          INSTANCE_ID="${{ steps.target.outputs.instance_id }}"
+
+          DEPLOY_CMD="set -e"
+          DEPLOY_CMD="$DEPLOY_CMD && aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ env.ECR_URI }}"
+          DEPLOY_CMD="$DEPLOY_CMD && cd ${{ env.APP_DIR }}"
+          DEPLOY_CMD="$DEPLOY_CMD && ECR_URI=${{ env.ECR_URI }} IMAGE_TAG=${{ github.sha }} docker compose pull"
+          DEPLOY_CMD="$DEPLOY_CMD && ECR_URI=${{ env.ECR_URI }} IMAGE_TAG=${{ github.sha }} docker compose up -d"
+          DEPLOY_CMD="$DEPLOY_CMD && cd /opt/gool3yhost/traefik && docker compose restart traefik"
+
+          COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
-            --targets '[{"Key":"tag:gool3yhost","Values":["true"]}]' \
-            --parameters 'commands=["cd /opt/gool3yhost/apps/storybook && IMAGE_TAG=${{ github.sha }} docker compose pull && IMAGE_TAG=${{ github.sha }} docker compose up -d"]' \
-            --region us-east-1
+            --instance-ids "$INSTANCE_ID" \
+            --timeout-seconds 300 \
+            --parameters "commands=[\"$DEPLOY_CMD\"]" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Command.CommandId' --output text)
+          echo "SSM Command ID: $COMMAND_ID"
+
+          for i in $(seq 1 30); do
+            RESULT=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --region ${{ env.AWS_REGION }} \
+              --output json 2>&1) || true
+            STATUS=$(echo "$RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('Status','Pending'))" 2>/dev/null || echo "Pending")
+            echo "Attempt $i: Status=$STATUS"
+            if [ "$STATUS" = "Success" ]; then
+              echo "Deploy succeeded"
+              exit 0
+            elif [ "$STATUS" = "Failed" ] || [ "$STATUS" = "TimedOut" ] || [ "$STATUS" = "Cancelled" ]; then
+              echo "Deploy failed with status: $STATUS"
+              echo "$RESULT" | python3 -c "import json,sys; d=json.load(sys.stdin); print('STDERR:', d.get('StandardErrorContent','')); print('STDOUT:', d.get('StandardOutputContent',''))" 2>/dev/null || true
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for deploy"
+          exit 1
+
+      - name: Verify deployment
+        run: |
+          INSTANCE_ID="${{ steps.target.outputs.instance_id }}"
+
+          sleep 10
+
+          CMD_ID=$(aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --instance-ids "$INSTANCE_ID" \
+            --parameters 'commands=["CONTAINER=$(docker ps --filter label=com.docker.compose.project=storybook --filter label=com.docker.compose.service=app --format {{.ID}} | head -1); if [ -z \"$CONTAINER\" ]; then echo \"No container found\"; exit 1; fi; for i in 1 2 3 4 5 6; do RESULT=$(docker exec $CONTAINER wget -q -O- http://localhost:3000/api/healthz 2>/dev/null) && echo \"$RESULT\" && exit 0; echo \"Attempt $i: healthz not ready, retrying...\"; sleep 5; done; echo \"healthz unreachable after retries\"; exit 1"]' \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Command.CommandId' --output text)
+
+          for i in $(seq 1 12); do
+            SSM_STATUS=$(aws ssm get-command-invocation \
+              --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
+              --region ${{ env.AWS_REGION }} --output json 2>&1 | \
+              python3 -c "import json,sys; print(json.load(sys.stdin).get('Status','Pending'))" 2>/dev/null || echo "Pending")
+            echo "SSM poll $i: $SSM_STATUS"
+            if [ "$SSM_STATUS" = "Success" ]; then
+              HEALTHZ=$(aws ssm get-command-invocation \
+                --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
+                --region ${{ env.AWS_REGION }} \
+                --query 'StandardOutputContent' --output text 2>/dev/null || echo "")
+              echo "Healthz: $HEALTHZ"
+              echo "Health check passed"
+              exit 0
+            elif [ "$SSM_STATUS" = "Failed" ] || [ "$SSM_STATUS" = "TimedOut" ]; then
+              echo "::warning::Post-deploy health check failed"
+              aws ssm get-command-invocation \
+                --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
+                --region ${{ env.AWS_REGION }} \
+                --query '[StandardOutputContent, StandardErrorContent]' --output text 2>/dev/null || true
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "::warning::Health check timed out"
+          exit 1

@@ -2,7 +2,7 @@
 name = "storybook"
 hostnames = ["storybook.gool3y.com"]
 port = 3000
-health_path = "/healthz"
+health_path = "/api/healthz"
 
 [app.auth]
 group = ["family"]
