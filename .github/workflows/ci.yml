@@ -77,7 +77,6 @@ jobs:
       - name: Create local.properties
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
-          echo "OPENROUTER_API_KEY=ci-placeholder" >> local.properties
           echo "SYNC_API_URL=https://ci-placeholder.example.com" >> local.properties
           echo "SYNC_API_KEY=ci-placeholder" >> local.properties
 
