@@ -124,7 +124,7 @@ export function migrate(): void {
     CREATE TABLE IF NOT EXISTS location_photos (
       id TEXT PRIMARY KEY,
       location_id TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
-      photo_path TEXT NOT NULL,
+      photo_path TEXT,
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );

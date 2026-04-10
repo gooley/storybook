@@ -96,7 +96,7 @@ router.post("/push", (req: Request, res: Response) => {
     `INSERT INTO location_photos (id, location_id, photo_path, sort_order, created_at)
      VALUES (@id, @location_id, @photo_path, @sort_order, @created_at)
      ON CONFLICT(id) DO UPDATE SET
-       photo_path = excluded.photo_path,
+       photo_path = COALESCE(NULLIF(excluded.photo_path, ''), location_photos.photo_path),
        sort_order = excluded.sort_order`
   );
 
@@ -171,7 +171,7 @@ router.post("/push", (req: Request, res: Response) => {
         upsertLocationPhoto.run({
           id: lp.id,
           location_id: lp.location_id,
-          photo_path: lp.photo_path,
+          photo_path: lp.photo_path || null,
           sort_order: lp.sort_order || 0,
           created_at: lp.created_at || Date.now(),
         });

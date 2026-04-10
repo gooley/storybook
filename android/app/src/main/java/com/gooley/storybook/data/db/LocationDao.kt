@@ -54,6 +54,9 @@ interface LocationDao {
     @Query("SELECT * FROM location_photos WHERE uuid = :uuid")
     suspend fun getPhotoByUuid(uuid: String): LocationPhoto?
 
+    @Query("UPDATE location_photos SET photoPath = :path, dirty = 0 WHERE id = :id")
+    suspend fun updatePhotoPath(id: Long, path: String)
+
     @Query("DELETE FROM location_photos WHERE id = :id")
     suspend fun deletePhoto(id: Long)
 

@@ -322,13 +322,7 @@ class SyncManager(
     private suspend fun downloadLocationPhoto(locationUuid: String, photoUuid: String, localId: Long) {
         val destFile = File(locationPhotosDir, "loc_photo_${localId}_synced.jpg")
         if (client.downloadFile(client.getLocationPhotoUrl(locationUuid, photoUuid), destFile)) {
-            val photo = locationDao.getPhotoByUuid(photoUuid)
-            if (photo != null) {
-                locationDao.insertPhoto(photo.copy(
-                    photoPath = destFile.absolutePath,
-                    dirty = false
-                ))
-            }
+            locationDao.updatePhotoPath(localId, destFile.absolutePath)
         }
     }
 

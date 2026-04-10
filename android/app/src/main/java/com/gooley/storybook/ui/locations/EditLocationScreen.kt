@@ -157,6 +157,8 @@ fun EditLocationScreen(
                                         scope.launch {
                                             locationDao.deletePhoto(photo.id)
                                             photos.remove(photo)
+                                            // TODO: propagate deletion to server via API call
+                                            // or sync tombstone mechanism
                                         }
                                     }
                             )
