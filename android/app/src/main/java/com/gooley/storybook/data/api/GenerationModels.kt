@@ -8,6 +8,7 @@ data class GenerationRequest(
     val description: String,
     @SerialName("pageCount") val pageCount: Int,
     @SerialName("characterIds") val characterIds: List<String>,
+    @SerialName("locationIds") val locationIds: List<String> = emptyList(),
     @SerialName("bookId") val bookId: String? = null
 )
 

@@ -17,6 +17,12 @@ export interface CharacterRef {
   photoPath: string | null;
 }
 
+export interface LocationRef {
+  name: string;
+  description: string;
+  photoPaths: string[];
+}
+
 export interface StoryPage {
   pageNumber: number;
   text: string;
@@ -251,6 +257,7 @@ export async function generateIllustration(
   outputPath: string,
   previousImagePath: string | null,
   characters: CharacterRef[],
+  locations: LocationRef[],
   model?: string
 ): Promise<GenerationResult<boolean>> {
   const useModel = model || DEFAULT_ILLUSTRATION_MODEL;
@@ -274,6 +281,31 @@ export async function generateIllustration(
     });
     prompt += `\nDraw these characters to resemble their reference photos — `;
     prompt += `capture their key features, coloring, and proportions in the illustration style.\n\n`;
+  }
+
+  // Count character photos for reference numbering offset
+  let refPhotoCount = characters.filter(
+    (c) => c.photoPath && fs.existsSync(path.join(uploadsDir, c.photoPath))
+  ).length;
+
+  if (locations.length > 0) {
+    prompt += `Settings/locations in this story (reference photos attached where available):\n`;
+    locations.forEach((loc) => {
+      prompt += `- ${loc.name}`;
+      if (loc.description) prompt += `: ${loc.description}`;
+      const existingPhotos = loc.photoPaths.filter((p) =>
+        fs.existsSync(path.join(uploadsDir, p))
+      );
+      if (existingPhotos.length > 0) {
+        const refs = existingPhotos.map(() => {
+          refPhotoCount++;
+          return `reference photo ${refPhotoCount}`;
+        });
+        prompt += ` [see ${refs.join(", ")}]`;
+      }
+      prompt += `\n`;
+    });
+    prompt += `\nUse these location reference photos to capture the look and feel of the setting in the illustration.\n\n`;
   }
 
   const hadReferenceImage =
@@ -303,6 +335,17 @@ export async function generateIllustration(
     for (const c of characters) {
       if (c.photoPath) {
         const fullPath = path.join(uploadsDir, c.photoPath);
+        if (fs.existsSync(fullPath)) {
+          const scaled = await scalePhoto(fullPath);
+          parts.push(fileToBase64Part(scaled, "image/jpeg"));
+          numImagesAttached++;
+        }
+      }
+    }
+
+    for (const loc of locations) {
+      for (const photoPath of loc.photoPaths) {
+        const fullPath = path.join(uploadsDir, photoPath);
         if (fs.existsSync(fullPath)) {
           const scaled = await scalePhoto(fullPath);
           parts.push(fileToBase64Part(scaled, "image/jpeg"));

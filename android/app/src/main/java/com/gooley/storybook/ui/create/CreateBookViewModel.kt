@@ -4,7 +4,9 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gooley.storybook.data.db.CharacterDao
+import com.gooley.storybook.data.db.LocationDao
 import com.gooley.storybook.data.model.Character
+import com.gooley.storybook.data.model.Location
 import com.gooley.storybook.data.repository.BookRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,12 +24,15 @@ data class CreateBookUiState(
     val error: String? = null,
     val createdBookId: Long? = null,
     val availableCharacters: List<Character> = emptyList(),
-    val selectedCharacterIds: Set<Long> = emptySet()
+    val selectedCharacterIds: Set<Long> = emptySet(),
+    val availableLocations: List<Location> = emptyList(),
+    val selectedLocationIds: Set<Long> = emptySet()
 )
 
 class CreateBookViewModel(
     private val repository: BookRepository,
-    private val characterDao: CharacterDao
+    private val characterDao: CharacterDao,
+    private val locationDao: LocationDao
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(CreateBookUiState())
     val uiState: StateFlow<CreateBookUiState> = _uiState.asStateFlow()
@@ -35,10 +40,12 @@ class CreateBookViewModel(
     init {
         viewModelScope.launch {
             val characters = characterDao.getAll().first()
+            val locations = locationDao.getAll().first()
             val defaultIds = characters.filter { it.includeByDefault }.map { it.id }.toSet()
             _uiState.value = _uiState.value.copy(
                 availableCharacters = characters,
-                selectedCharacterIds = defaultIds
+                selectedCharacterIds = defaultIds,
+                availableLocations = locations
             )
         }
         // Resume active job if app was restarted
@@ -98,6 +105,13 @@ class CreateBookViewModel(
         )
     }
 
+    fun toggleLocation(id: Long) {
+        val current = _uiState.value.selectedLocationIds
+        _uiState.value = _uiState.value.copy(
+            selectedLocationIds = if (id in current) current - id else current + id
+        )
+    }
+
     fun generateBook() {
         val state = _uiState.value
         if (state.description.isBlank()) return
@@ -111,6 +125,7 @@ class CreateBookViewModel(
                     description = state.description,
                     pageCount = state.pageCount,
                     selectedCharacterIds = state.selectedCharacterIds,
+                    selectedLocationIds = state.selectedLocationIds,
                     onProgress = { message, fraction ->
                         _uiState.value = _uiState.value.copy(
                             progress = message,

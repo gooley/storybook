@@ -78,6 +78,54 @@ export async function uploadCharacterPhoto(id: string, file: File): Promise<{ ph
 }
 
 export const getCharacterPhotoUrl = (id: string) => `${BASE}/characters/${id}/photo`;
+
+// Locations API
+export interface Location {
+  id: string;
+  name: string;
+  description: string;
+  created_at: number;
+  updated_at: number;
+  deleted_at: number | null;
+}
+
+export interface LocationPhoto {
+  id: string;
+  location_id: string;
+  photo_path: string;
+  sort_order: number;
+  created_at: number;
+}
+
+export interface LocationWithPhotos extends Location {
+  photos: LocationPhoto[];
+}
+
+export const getLocations = () => request<LocationWithPhotos[]>("/locations");
+export const createLocation = (data: { name: string; description?: string }) =>
+  request<Location>("/locations", { method: "POST", body: JSON.stringify(data) });
+export const updateLocation = (id: string, data: { name?: string; description?: string }) =>
+  request<Location>(`/locations/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteLocation = (id: string) =>
+  request<void>(`/locations/${id}`, { method: "DELETE" });
+
+export async function uploadLocationPhoto(locationId: string, file: File): Promise<LocationPhoto> {
+  const form = new FormData();
+  form.append("photo", file);
+  const res = await fetch(`${BASE}/locations/${locationId}/photos`, { method: "POST", body: form });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Upload failed: ${body}`);
+  }
+  return res.json();
+}
+
+export const deleteLocationPhoto = (locationId: string, photoId: string) =>
+  request<void>(`/locations/${locationId}/photos/${photoId}`, { method: "DELETE" });
+
+export const getLocationPhotoUrl = (locationId: string, photoId: string) =>
+  `${BASE}/locations/${locationId}/photos/${photoId}`;
+
 export const getBooks = () => request<Book[]>("/books");
 export const updateBook = (id: string, data: Partial<Book>) =>
   request<Book>(`/books/${id}`, { method: "PUT", body: JSON.stringify(data) });
@@ -91,6 +139,7 @@ export const startGeneration = (data: {
   description: string;
   pageCount: number;
   characterIds: string[];
+  locationIds: string[];
   bookId?: string;
   storyModel?: string;
   illustrationModel?: string;
@@ -129,6 +178,7 @@ export interface GenerationParams {
   description: string;
   pageCount: number;
   characterIds: string[];
+  locationIds: string[];
   title: string;
   storyModel: string | null;
   illustrationModel: string | null;

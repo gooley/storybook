@@ -20,6 +20,7 @@ class BookRepository(private val context: Context) {
     private val bookDao = db.bookDao()
     private val pageDao = db.pageDao()
     private val characterDao = db.characterDao()
+    private val locationDao = db.locationDao()
     private val generationClient = GenerationClient()
     private val syncManager = SyncManager(context)
     private val prefs = context.getSharedPreferences("generation", Context.MODE_PRIVATE)
@@ -70,6 +71,7 @@ class BookRepository(private val context: Context) {
         description: String,
         pageCount: Int = 4,
         selectedCharacterIds: Set<Long> = emptySet(),
+        selectedLocationIds: Set<Long> = emptySet(),
         onProgress: (String, Float) -> Unit,
         onFirstIllustration: ((String) -> Unit)? = null
     ): Long {
@@ -77,14 +79,16 @@ class BookRepository(private val context: Context) {
         val characterUuids = selectedCharacterIds.mapNotNull { localId ->
             characterDao.getUuidByLocalId(localId)
         }
+        val locationUuids = selectedLocationIds.mapNotNull { localId ->
+            locationDao.getUuidByLocalId(localId)
+        }
 
-        // Ensure characters are synced to server (photos included)
-        onProgress("Syncing characters...", 0f)
+        // Ensure characters and locations are synced to server (photos included)
+        onProgress("Syncing...", 0f)
         try {
             syncManager.sync()
         } catch (e: Exception) {
             Log.w(TAG, "Pre-generation sync failed: ${e.message}")
-            // Continue — characters may already be on server
         }
 
         // Generate a bookId client-side for idempotency
@@ -97,6 +101,7 @@ class BookRepository(private val context: Context) {
                 description = description,
                 pageCount = pageCount,
                 characterIds = characterUuids,
+                locationIds = locationUuids,
                 bookId = bookId
             )
         )

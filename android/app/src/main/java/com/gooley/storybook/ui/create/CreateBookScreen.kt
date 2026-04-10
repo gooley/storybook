@@ -38,7 +38,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.gooley.storybook.data.db.CharacterDao
+import com.gooley.storybook.data.db.LocationDao
 import com.gooley.storybook.data.model.Character
+import com.gooley.storybook.data.model.Location
 import com.gooley.storybook.data.repository.BookRepository
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -46,10 +48,11 @@ import com.gooley.storybook.data.repository.BookRepository
 fun CreateBookScreen(
     repository: BookRepository,
     characterDao: CharacterDao,
+    locationDao: LocationDao,
     onBookCreated: (Long) -> Unit,
     onBack: () -> Unit
 ) {
-    val viewModel = remember { CreateBookViewModel(repository, characterDao) }
+    val viewModel = remember { CreateBookViewModel(repository, characterDao, locationDao) }
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(uiState.createdBookId) {
@@ -211,6 +214,30 @@ fun CreateBookScreen(
                                         label = { Text(character.name) }
                                     )
                                 }
+                            }
+                        }
+                    }
+
+                    // Location selection
+                    if (uiState.availableLocations.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Set in location:",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        ) {
+                            uiState.availableLocations.forEach { location ->
+                                val selected = location.id in uiState.selectedLocationIds
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = { viewModel.toggleLocation(location.id) },
+                                    label = { Text(location.name) }
+                                )
                             }
                         }
                     }

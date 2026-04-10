@@ -8,6 +8,7 @@ import {
   generateIllustration,
   generateCover,
   CharacterRef,
+  LocationRef,
   GenerationResult,
 } from "./openrouter";
 
@@ -180,14 +181,62 @@ function loadCharacterRefs(characterIds: string[]): CharacterRef[] {
   });
 }
 
+// --- Location Loading ---
+
+interface DbLocation {
+  id: string;
+  name: string;
+  description: string;
+}
+
+interface DbLocationPhoto {
+  photo_path: string;
+}
+
+function loadLocationRefs(locationIds: string[]): LocationRef[] {
+  if (locationIds.length === 0) return [];
+
+  const placeholders = locationIds.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `SELECT id, name, description FROM locations WHERE id IN (${placeholders}) AND deleted_at IS NULL`
+    )
+    .all(...locationIds) as DbLocation[];
+
+  return rows.map((loc) => {
+    const photos = db
+      .prepare(
+        "SELECT photo_path FROM location_photos WHERE location_id = ? ORDER BY sort_order"
+      )
+      .all(loc.id) as DbLocationPhoto[];
+
+    return {
+      name: loc.name,
+      description: loc.description,
+      photoPaths: photos.map((p) => p.photo_path),
+    };
+  });
+}
+
 function enrichDescription(
   description: string,
-  characters: CharacterRef[]
+  characters: CharacterRef[],
+  locations: LocationRef[]
 ): string {
-  if (characters.length === 0) return description;
-  let enriched = description + "\n\nCharacters to feature in the story:\n";
-  for (const c of characters) {
-    enriched += `- ${c.name} (${c.description})\n`;
+  let enriched = description;
+  if (characters.length > 0) {
+    enriched += "\n\nCharacters to feature in the story:\n";
+    for (const c of characters) {
+      enriched += `- ${c.name} (${c.description})\n`;
+    }
+  }
+  if (locations.length > 0) {
+    enriched += "\n\nSettings/locations for the story:\n";
+    for (const loc of locations) {
+      enriched += `- ${loc.name}`;
+      if (loc.description) enriched += ` (${loc.description})`;
+      enriched += `\n`;
+    }
   }
   return enriched;
 }
@@ -196,7 +245,7 @@ function enrichDescription(
 
 async function executeGenerateBook(job: GenerationJob): Promise<void> {
   const payload = JSON.parse(job.request_payload);
-  const { description, pageCount, characterIds, bookId } = payload;
+  const { description, pageCount, characterIds, locationIds, bookId } = payload;
   // Optional model overrides
   const storyModel: string | undefined = payload.storyModel;
   const illustrationModel: string | undefined = payload.illustrationModel;
@@ -219,9 +268,10 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
     started_at: now,
   });
 
-  // Load characters
+  // Load characters and locations
   const characters = loadCharacterRefs(characterIds || []);
-  const enrichedDescription = enrichDescription(description, characters);
+  const locations = loadLocationRefs(locationIds || []);
+  const enrichedDescription = enrichDescription(description, characters, locations);
 
   // Step 1: Generate story text
   const storyResult = await generateStory(enrichedDescription, pageCount, storyModel);
@@ -281,6 +331,7 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
     firstImagePath,
     null,
     characters,
+    locations,
     illustrationModel
   );
   const firstSuccess = firstResult.data;
@@ -342,6 +393,7 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
           imagePath,
           firstSuccess ? firstImagePath : null,
           characters,
+          locations,
           illustrationModel
         );
         const success = illusResult.data;
@@ -493,6 +545,7 @@ async function executeRegenerateIllustrations(
 
   // Load characters from description (no character IDs stored for regen)
   const characters: CharacterRef[] = [];
+  const locations: LocationRef[] = [];
 
   const limit = pLimit(ILLUSTRATION_CONCURRENCY);
   const completedPageIds: string[] = [];
@@ -512,7 +565,8 @@ async function executeRegenerateIllustrations(
         book.title,
         imagePath,
         referenceImagePath,
-        characters
+        characters,
+        locations
       );
       const success = illusResult.data;
 

@@ -48,7 +48,7 @@ function checkRateLimits(): string | null {
 
 // POST /api/generate/book — Start a new book generation job
 router.post("/book", (req: Request, res: Response) => {
-  const { description, pageCount, characterIds, bookId, storyModel, illustrationModel, coverModel } = req.body;
+  const { description, pageCount, characterIds, locationIds, bookId, storyModel, illustrationModel, coverModel } = req.body;
 
   // Validation
   if (!description || typeof description !== "string") {
@@ -62,6 +62,10 @@ router.post("/book", (req: Request, res: Response) => {
   }
   if (characterIds && !Array.isArray(characterIds)) {
     res.status(400).json({ error: "characterIds must be an array" });
+    return;
+  }
+  if (locationIds && !Array.isArray(locationIds)) {
+    res.status(400).json({ error: "locationIds must be an array" });
     return;
   }
 
@@ -100,6 +104,27 @@ router.post("/book", (req: Request, res: Response) => {
     }
   }
 
+  // Validate locations exist
+  if (locationIds && locationIds.length > 0) {
+    const placeholders = locationIds.map(() => "?").join(",");
+    const found = db
+      .prepare(
+        `SELECT id FROM locations WHERE id IN (${placeholders}) AND deleted_at IS NULL`
+      )
+      .all(...locationIds) as { id: string }[];
+    const foundIds = new Set(found.map((r) => r.id));
+    const missing = locationIds.filter(
+      (id: string) => !foundIds.has(id)
+    );
+    if (missing.length > 0) {
+      res.status(422).json({
+        error: "Some locations not found on server",
+        missingLocationIds: missing,
+      });
+      return;
+    }
+  }
+
   // Rate limit check
   const rateLimitError = checkRateLimits();
   if (rateLimitError) {
@@ -121,6 +146,7 @@ router.post("/book", (req: Request, res: Response) => {
       description: description.slice(0, 2000),
       pageCount: count,
       characterIds: characterIds || [],
+      locationIds: locationIds || [],
       bookId: resolvedBookId,
       ...(storyModel && { storyModel }),
       ...(illustrationModel && { illustrationModel }),

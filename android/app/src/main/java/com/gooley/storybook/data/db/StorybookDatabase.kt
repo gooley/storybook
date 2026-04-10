@@ -8,13 +8,16 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.gooley.storybook.data.model.Book
 import com.gooley.storybook.data.model.Character
+import com.gooley.storybook.data.model.Location
+import com.gooley.storybook.data.model.LocationPhoto
 import com.gooley.storybook.data.model.Page
 
-@Database(entities = [Book::class, Page::class, Character::class], version = 5, exportSchema = false)
+@Database(entities = [Book::class, Page::class, Character::class, Location::class, LocationPhoto::class], version = 6, exportSchema = false)
 abstract class StorybookDatabase : RoomDatabase() {
     abstract fun bookDao(): BookDao
     abstract fun pageDao(): PageDao
     abstract fun characterDao(): CharacterDao
+    abstract fun locationDao(): LocationDao
 
     companion object {
         @Volatile
@@ -143,6 +146,39 @@ abstract class StorybookDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS locations (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        uuid TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        description TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL,
+                        dirty INTEGER NOT NULL,
+                        deletedAt INTEGER
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_locations_uuid ON locations(uuid)")
+
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS location_photos (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        uuid TEXT NOT NULL,
+                        locationId INTEGER NOT NULL,
+                        photoPath TEXT NOT NULL,
+                        sortOrder INTEGER NOT NULL,
+                        createdAt INTEGER NOT NULL,
+                        dirty INTEGER NOT NULL,
+                        FOREIGN KEY(locationId) REFERENCES locations(id) ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_location_photos_uuid ON location_photos(uuid)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_location_photos_locationId ON location_photos(locationId)")
+            }
+        }
+
         fun getInstance(context: Context): StorybookDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -150,7 +186,7 @@ abstract class StorybookDatabase : RoomDatabase() {
                     StorybookDatabase::class.java,
                     "storybook.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build()
                 INSTANCE = instance
                 instance

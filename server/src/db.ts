@@ -14,6 +14,7 @@ fs.mkdirSync(path.join(DATA_DIR, "uploads", "covers"), { recursive: true });
 fs.mkdirSync(path.join(DATA_DIR, "uploads", "illustrations"), {
   recursive: true,
 });
+fs.mkdirSync(path.join(DATA_DIR, "uploads", "locations"), { recursive: true });
 
 const db: import("better-sqlite3").Database = new Database(DB_PATH);
 
@@ -110,6 +111,26 @@ export function migrate(): void {
 
     CREATE INDEX IF NOT EXISTS idx_generation_logs_book ON generation_logs(book_id);
     CREATE INDEX IF NOT EXISTS idx_generation_logs_job ON generation_logs(job_id);
+
+    CREATE TABLE IF NOT EXISTS locations (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      deleted_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS location_photos (
+      id TEXT PRIMARY KEY,
+      location_id TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+      photo_path TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_locations_updated ON locations(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_location_photos_location ON location_photos(location_id);
   `);
 
   // Migration: add hidden column to books (safe to run on existing DBs)

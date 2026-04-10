@@ -5,6 +5,8 @@ import android.util.Log
 import com.gooley.storybook.data.db.StorybookDatabase
 import com.gooley.storybook.data.model.Book
 import com.gooley.storybook.data.model.Character
+import com.gooley.storybook.data.model.Location
+import com.gooley.storybook.data.model.LocationPhoto
 import com.gooley.storybook.data.model.Page
 import java.io.File
 
@@ -16,9 +18,11 @@ class SyncManager(
     private val bookDao = db.bookDao()
     private val pageDao = db.pageDao()
     private val characterDao = db.characterDao()
+    private val locationDao = db.locationDao()
     private val prefs = context.getSharedPreferences("sync", Context.MODE_PRIVATE)
     private val illustrationsDir = File(context.filesDir, "illustrations").also { it.mkdirs() }
     private val photosDir = File(context.filesDir, "character_photos").also { it.mkdirs() }
+    private val locationPhotosDir = File(context.filesDir, "location_photos").also { it.mkdirs() }
 
     suspend fun sync() {
         if (!client.isConfigured()) {
@@ -35,24 +39,31 @@ class SyncManager(
         val dirtyBooks = bookDao.getDirty()
         val dirtyPages = pageDao.getDirty()
         val dirtyCharacters = characterDao.getDirty()
+        val dirtyLocations = locationDao.getDirty()
+        val dirtyLocationPhotos = locationDao.getDirtyPhotos()
 
-        if (dirtyBooks.isEmpty() && dirtyPages.isEmpty() && dirtyCharacters.isEmpty()) {
+        if (dirtyBooks.isEmpty() && dirtyPages.isEmpty() && dirtyCharacters.isEmpty() &&
+            dirtyLocations.isEmpty() && dirtyLocationPhotos.isEmpty()) {
             Log.d(TAG, "Nothing to push")
             return
         }
 
-        Log.d(TAG, "Pushing ${dirtyBooks.size} books, ${dirtyPages.size} pages, ${dirtyCharacters.size} characters")
+        Log.d(TAG, "Pushing ${dirtyBooks.size} books, ${dirtyPages.size} pages, ${dirtyCharacters.size} characters, ${dirtyLocations.size} locations")
 
         // Convert to sync models
         val syncBooks = dirtyBooks.map { it.toSyncBook() }
         val syncPages = dirtyPages.mapNotNull { it.toSyncPage() }
         val syncCharacters = dirtyCharacters.map { it.toSyncCharacter() }
+        val syncLocations = dirtyLocations.map { it.toSyncLocation() }
+        val syncLocationPhotos = dirtyLocationPhotos.mapNotNull { it.toSyncLocationPhoto() }
 
         // Push metadata
         val request = SyncPushRequest(
             characters = syncCharacters,
             books = syncBooks,
-            pages = syncPages
+            pages = syncPages,
+            locations = syncLocations,
+            locationPhotos = syncLocationPhotos
         )
         client.pushChanges(request)
 
@@ -87,6 +98,21 @@ class SyncManager(
             pageDao.markSynced(page.uuid)
         }
 
+        for (location in dirtyLocations) {
+            locationDao.markSynced(location.uuid)
+        }
+
+        for (photo in dirtyLocationPhotos) {
+            val locationUuid = locationDao.getUuidByLocalId(photo.locationId)
+            if (locationUuid != null && photo.photoPath.isNotEmpty()) {
+                val file = File(photo.photoPath)
+                if (file.exists()) {
+                    client.uploadLocationPhoto(locationUuid, file)
+                }
+            }
+            locationDao.markPhotoSynced(photo.uuid)
+        }
+
         Log.d(TAG, "Push complete")
     }
 
@@ -94,7 +120,7 @@ class SyncManager(
         val lastSyncTime = prefs.getLong("last_sync_time", 0)
 
         val response = client.pullChanges(lastSyncTime)
-        Log.d(TAG, "Pulled ${response.characters.size} characters, ${response.books.size} books, ${response.pages.size} pages")
+        Log.d(TAG, "Pulled ${response.characters.size} characters, ${response.books.size} books, ${response.pages.size} pages, ${response.locations.size} locations")
 
         // Upsert characters
         for (sc in response.characters) {
@@ -210,6 +236,50 @@ class SyncManager(
             }
         }
 
+        // Upsert locations
+        for (sl in response.locations) {
+            val existing = locationDao.getByUuid(sl.id)
+            if (existing != null) {
+                if (sl.updatedAt > existing.updatedAt) {
+                    locationDao.upsert(existing.copy(
+                        name = sl.name,
+                        description = sl.description,
+                        updatedAt = sl.updatedAt,
+                        deletedAt = sl.deletedAt,
+                        dirty = false
+                    ))
+                }
+            } else if (sl.deletedAt == null) {
+                locationDao.insert(Location(
+                    uuid = sl.id,
+                    name = sl.name,
+                    description = sl.description,
+                    createdAt = sl.createdAt,
+                    updatedAt = sl.updatedAt,
+                    dirty = false
+                ))
+            }
+        }
+
+        // Upsert location photos
+        for (slp in response.locationPhotos) {
+            val locationLocalId = locationDao.getByUuid(slp.locationId)?.id ?: continue
+            val existing = locationDao.getPhotoByUuid(slp.id)
+            if (existing == null) {
+                val localId = locationDao.insertPhoto(LocationPhoto(
+                    uuid = slp.id,
+                    locationId = locationLocalId,
+                    photoPath = "",
+                    sortOrder = slp.sortOrder,
+                    createdAt = slp.createdAt,
+                    dirty = false
+                ))
+                if (slp.photoPath != null) {
+                    downloadLocationPhoto(slp.locationId, slp.id, localId)
+                }
+            }
+        }
+
         // Update last sync time
         prefs.edit().putLong("last_sync_time", response.serverTime).apply()
         Log.d(TAG, "Pull complete, server_time=${response.serverTime}")
@@ -243,6 +313,19 @@ class SyncManager(
                 pageDao.update(page.copy(
                     imagePath = destFile.absolutePath,
                     imageStatus = Page.IMAGE_DONE,
+                    dirty = false
+                ))
+            }
+        }
+    }
+
+    private suspend fun downloadLocationPhoto(locationUuid: String, photoUuid: String, localId: Long) {
+        val destFile = File(locationPhotosDir, "loc_photo_${localId}_synced.jpg")
+        if (client.downloadFile(client.getLocationPhotoUrl(locationUuid, photoUuid), destFile)) {
+            val photo = locationDao.getPhotoByUuid(photoUuid)
+            if (photo != null) {
+                locationDao.insertPhoto(photo.copy(
+                    photoPath = destFile.absolutePath,
                     dirty = false
                 ))
             }
@@ -287,6 +370,26 @@ class SyncManager(
         updatedAt = updatedAt,
         deletedAt = deletedAt
     )
+
+    private fun Location.toSyncLocation() = SyncLocation(
+        id = uuid,
+        name = name,
+        description = description,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+        deletedAt = deletedAt
+    )
+
+    private suspend fun LocationPhoto.toSyncLocationPhoto(): SyncLocationPhoto? {
+        val locationUuid = locationDao.getUuidByLocalId(locationId) ?: return null
+        return SyncLocationPhoto(
+            id = uuid,
+            locationId = locationUuid,
+            photoPath = null,
+            sortOrder = sortOrder,
+            createdAt = createdAt
+        )
+    }
 
     companion object {
         private const val TAG = "SyncManager"

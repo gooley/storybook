@@ -21,21 +21,31 @@ router.get("/changes", (req: Request, res: Response) => {
   const pages = db
     .prepare("SELECT * FROM pages WHERE updated_at > ?")
     .all(since);
+  const locations = db
+    .prepare("SELECT * FROM locations WHERE updated_at > ?")
+    .all(since);
+  const location_photos = db
+    .prepare(
+      `SELECT lp.* FROM location_photos lp
+       JOIN locations l ON lp.location_id = l.id
+       WHERE l.updated_at > ? OR lp.created_at > ?`
+    )
+    .all(since, since);
 
-  // Return in dependency order: characters first, then books, then pages
-  // This ensures Android can resolve book_id FK when inserting pages
   res.json({
     characters,
     books,
     pages,
+    locations,
+    location_photos,
     server_time: Date.now(),
   });
 });
 
 // Push changes from device (Android push)
 router.post("/push", (req: Request, res: Response) => {
-  const { characters, books, pages } = req.body;
-  const results = { characters: 0, books: 0, pages: 0 };
+  const { characters, books, pages, locations, location_photos } = req.body;
+  const results = { characters: 0, books: 0, pages: 0, locations: 0, location_photos: 0 };
 
   const upsertCharacter = db.prepare(
     `INSERT INTO characters (id, name, type, notes, photo_path, include_by_default, created_at, updated_at, deleted_at)
@@ -70,6 +80,24 @@ router.post("/push", (req: Request, res: Response) => {
        image_status = CASE WHEN excluded.updated_at > pages.updated_at THEN excluded.image_status ELSE pages.image_status END,
        updated_at = MAX(excluded.updated_at, pages.updated_at),
        deleted_at = CASE WHEN excluded.updated_at > pages.updated_at THEN excluded.deleted_at ELSE pages.deleted_at END`
+  );
+
+  const upsertLocation = db.prepare(
+    `INSERT INTO locations (id, name, description, created_at, updated_at, deleted_at)
+     VALUES (@id, @name, @description, @created_at, @updated_at, @deleted_at)
+     ON CONFLICT(id) DO UPDATE SET
+       name = CASE WHEN excluded.updated_at > locations.updated_at THEN excluded.name ELSE locations.name END,
+       description = CASE WHEN excluded.updated_at > locations.updated_at THEN excluded.description ELSE locations.description END,
+       updated_at = MAX(excluded.updated_at, locations.updated_at),
+       deleted_at = CASE WHEN excluded.updated_at > locations.updated_at THEN excluded.deleted_at ELSE locations.deleted_at END`
+  );
+
+  const upsertLocationPhoto = db.prepare(
+    `INSERT INTO location_photos (id, location_id, photo_path, sort_order, created_at)
+     VALUES (@id, @location_id, @photo_path, @sort_order, @created_at)
+     ON CONFLICT(id) DO UPDATE SET
+       photo_path = excluded.photo_path,
+       sort_order = excluded.sort_order`
   );
 
   const pushAll = db.transaction(() => {
@@ -121,6 +149,33 @@ router.post("/push", (req: Request, res: Response) => {
           deleted_at: p.deleted_at || null,
         });
         results.pages++;
+      }
+    }
+
+    if (Array.isArray(locations)) {
+      for (const loc of locations as SyncEntity[]) {
+        upsertLocation.run({
+          id: loc.id,
+          name: loc.name,
+          description: loc.description || "",
+          created_at: loc.created_at || Date.now(),
+          updated_at: loc.updated_at || Date.now(),
+          deleted_at: loc.deleted_at || null,
+        });
+        results.locations++;
+      }
+    }
+
+    if (Array.isArray(location_photos)) {
+      for (const lp of location_photos as SyncEntity[]) {
+        upsertLocationPhoto.run({
+          id: lp.id,
+          location_id: lp.location_id,
+          photo_path: lp.photo_path,
+          sort_order: lp.sort_order || 0,
+          created_at: lp.created_at || Date.now(),
+        });
+        results.location_photos++;
       }
     }
   });

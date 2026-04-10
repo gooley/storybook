@@ -7,7 +7,9 @@ import kotlinx.serialization.Serializable
 data class SyncPushRequest(
     val characters: List<SyncCharacter> = emptyList(),
     val books: List<SyncBook> = emptyList(),
-    val pages: List<SyncPage> = emptyList()
+    val pages: List<SyncPage> = emptyList(),
+    val locations: List<SyncLocation> = emptyList(),
+    @SerialName("location_photos") val locationPhotos: List<SyncLocationPhoto> = emptyList()
 )
 
 @Serializable
@@ -15,6 +17,8 @@ data class SyncPullResponse(
     val characters: List<SyncCharacter> = emptyList(),
     val books: List<SyncBook> = emptyList(),
     val pages: List<SyncPage> = emptyList(),
+    val locations: List<SyncLocation> = emptyList(),
+    @SerialName("location_photos") val locationPhotos: List<SyncLocationPhoto> = emptyList(),
     @SerialName("server_time") val serverTime: Long = 0
 )
 
@@ -28,7 +32,9 @@ data class SyncPushResponse(
 data class SyncCounts(
     val characters: Int = 0,
     val books: Int = 0,
-    val pages: Int = 0
+    val pages: Int = 0,
+    val locations: Int = 0,
+    @SerialName("location_photos") val locationPhotos: Int = 0
 )
 
 @Serializable
@@ -68,4 +74,23 @@ data class SyncPage(
     @SerialName("created_at") val createdAt: Long,
     @SerialName("updated_at") val updatedAt: Long,
     @SerialName("deleted_at") val deletedAt: Long? = null
+)
+
+@Serializable
+data class SyncLocation(
+    val id: String,
+    val name: String,
+    val description: String = "",
+    @SerialName("created_at") val createdAt: Long,
+    @SerialName("updated_at") val updatedAt: Long,
+    @SerialName("deleted_at") val deletedAt: Long? = null
+)
+
+@Serializable
+data class SyncLocationPhoto(
+    val id: String,
+    @SerialName("location_id") val locationId: String,
+    @SerialName("photo_path") val photoPath: String? = null,
+    @SerialName("sort_order") val sortOrder: Int = 0,
+    @SerialName("created_at") val createdAt: Long
 )
