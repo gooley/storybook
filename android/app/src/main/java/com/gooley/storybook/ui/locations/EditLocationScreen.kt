@@ -77,7 +77,7 @@ fun EditLocationScreen(
                 description = loc.description
             }
             photos.clear()
-            photos.addAll(locationDao.getPhotosForLocation(locationId))
+            photos.addAll(locationDao.getPhotosForLocationSync(locationId))
         }
     }
 
