@@ -249,7 +249,7 @@ export async function generateIllustration(
   pageText: string,
   bookTitle: string,
   outputPath: string,
-  previousImagePath: string | null,
+  previousImagePaths: string[],
   characters: CharacterRef[],
   model?: string
 ): Promise<GenerationResult<boolean>> {
@@ -257,6 +257,11 @@ export async function generateIllustration(
   const uploadsDir = getUploadsDir();
   const startTime = Date.now();
   let numImagesAttached = 0;
+
+  // Filter to only paths that exist on disk
+  const validPreviousPaths = previousImagePaths.filter((p) =>
+    fs.existsSync(p)
+  );
 
   // Build prompt
   let prompt = `Generate an illustration for a children's storybook page.\n\n`;
@@ -276,11 +281,10 @@ export async function generateIllustration(
     prompt += `capture their key features, coloring, and proportions in the illustration style.\n\n`;
   }
 
-  const hadReferenceImage =
-    previousImagePath != null && fs.existsSync(previousImagePath);
+  const hadReferenceImage = validPreviousPaths.length > 0;
   if (hadReferenceImage) {
-    prompt += `I've attached the previous page's illustration. `;
-    prompt += `Keep a consistent art style, color palette, and character designs.\n\n`;
+    prompt += `I've attached the ${validPreviousPaths.length} previous page illustration(s) from this book. `;
+    prompt += `Study them carefully and keep a consistent art style, color palette, and character designs throughout.\n\n`;
   }
 
   prompt += `Style: Sharp pen and ink illustration with bold lines. `;
@@ -297,7 +301,7 @@ export async function generateIllustration(
       : null;
 
   try {
-    // Build multimodal content: character photos first, then previous page, then text
+    // Build multimodal content: character photos first, then previous pages, then text
     const parts: Record<string, any>[] = [];
 
     for (const c of characters) {
@@ -311,8 +315,8 @@ export async function generateIllustration(
       }
     }
 
-    if (hadReferenceImage) {
-      const prevPart = await buildImagePart(previousImagePath!);
+    for (const prevPath of validPreviousPaths) {
+      const prevPart = await buildImagePart(prevPath);
       if (prevPart) {
         parts.push(prevPart);
         numImagesAttached++;
