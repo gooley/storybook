@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
 import { Characters } from "./pages/Characters";
+import { Locations } from "./pages/Locations";
 import { Books } from "./pages/Books";
 import { CreateBook } from "./pages/CreateBook";
 import { Reader } from "./pages/Reader";
@@ -18,6 +19,7 @@ function App() {
             <NavLink to="/">Books</NavLink>
             <NavLink to="/create">Create</NavLink>
             <NavLink to="/characters">Characters</NavLink>
+            <NavLink to="/locations">Locations</NavLink>
           </div>
         </nav>
         <main className="main">
@@ -25,6 +27,7 @@ function App() {
             <Route path="/" element={<Books />} />
             <Route path="/create" element={<CreateBook />} />
             <Route path="/characters" element={<Characters />} />
+            <Route path="/locations" element={<Locations />} />
             <Route path="/reader/:bookId" element={<Reader />} />
             <Route path="/reader/:bookId/debug" element={<BookDebug />} />
           </Routes>

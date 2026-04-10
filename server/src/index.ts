@@ -4,6 +4,7 @@ import express from "express";
 import cors from "cors";
 import { migrate } from "./db";
 import charactersRouter from "./routes/characters";
+import locationsRouter from "./routes/locations";
 import booksRouter from "./routes/books";
 import syncRouter from "./routes/sync";
 import generateRouter from "./routes/generate";
@@ -43,6 +44,7 @@ app.get("/api/healthz", (_req, res) => {
 });
 
 app.use("/api/characters", charactersRouter);
+app.use("/api/locations", locationsRouter);
 app.use("/api/books", booksRouter);
 app.use("/api/sync", syncRouter);
 app.use("/api/generate", generateRouter);

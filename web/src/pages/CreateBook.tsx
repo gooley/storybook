@@ -3,12 +3,15 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   getCharacters,
   getCharacterPhotoUrl,
+  getLocations,
+  getLocationPhotoUrl,
   getPageImageUrl,
   startGeneration,
   pollGenerationStatus,
   getAvailableModels,
   getBookGenerationParams,
   type Character,
+  type LocationWithPhotos,
   type GenerationStatus,
   type ModelLists,
 } from "../api/client";
@@ -28,6 +31,8 @@ export function CreateBook() {
   const [pageCount, setPageCount] = useState(4);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [locations, setLocations] = useState<LocationWithPhotos[]>([]);
+  const [selectedLocationIds, setSelectedLocationIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [variationTitle, setVariationTitle] = useState<string | null>(null);
 
@@ -48,9 +53,9 @@ export function CreateBook() {
 
   const loadCharacters = useCallback(async () => {
     try {
-      const chars = await getCharacters();
+      const [chars, locs] = await Promise.all([getCharacters(), getLocations()]);
       setCharacters(chars);
-      // Pre-select characters marked as include_by_default
+      setLocations(locs);
       const defaultIds = new Set(chars.filter((c) => c.include_by_default).map((c) => c.id));
       setSelectedIds(defaultIds);
     } finally {
@@ -75,6 +80,7 @@ export function CreateBook() {
       setDescription(params.description);
       setPageCount(params.pageCount);
       setSelectedIds(new Set(params.characterIds));
+      setSelectedLocationIds(new Set(params.locationIds || []));
       setVariationTitle(params.title);
       if (params.storyModel) setStoryModel(params.storyModel);
       if (params.illustrationModel) setIllustrationModel(params.illustrationModel);
@@ -91,6 +97,15 @@ export function CreateBook() {
 
   const toggleCharacter = (id: string) => {
     setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleLocation = (id: string) => {
+    setSelectedLocationIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -167,6 +182,7 @@ export function CreateBook() {
         description: description.trim(),
         pageCount,
         characterIds: Array.from(selectedIds),
+        locationIds: Array.from(selectedLocationIds),
         ...modelOverrides,
       });
       startPolling(result.jobId, result.bookId);
@@ -277,6 +293,32 @@ export function CreateBook() {
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {locations.length > 0 && (
+            <div className="form-group">
+              <label>Locations</label>
+              <div className="character-picker">
+                <div className="character-chips">
+                  {locations.map((loc) => (
+                    <button
+                      key={loc.id}
+                      className={`character-chip ${selectedLocationIds.has(loc.id) ? "selected" : ""}`}
+                      onClick={() => toggleLocation(loc.id)}
+                    >
+                      {loc.photos.length > 0 && (
+                        <img
+                          src={getLocationPhotoUrl(loc.id, loc.photos[0].id)}
+                          alt={loc.name}
+                          className="chip-photo"
+                        />
+                      )}
+                      <span>{loc.name}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}

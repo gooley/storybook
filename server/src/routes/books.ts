@@ -209,6 +209,7 @@ router.get("/:id/generation-params", (req: Request, res: Response) => {
       description: book.description || "",
       pageCount: pageCount.count || 4,
       characterIds: [],
+      locationIds: [],
       title: book.title,
     });
     return;
@@ -219,6 +220,7 @@ router.get("/:id/generation-params", (req: Request, res: Response) => {
     description: payload.description || book.description || "",
     pageCount: payload.pageCount || 4,
     characterIds: payload.characterIds || [],
+    locationIds: payload.locationIds || [],
     title: book.title,
     storyModel: payload.storyModel || null,
     illustrationModel: payload.illustrationModel || null,

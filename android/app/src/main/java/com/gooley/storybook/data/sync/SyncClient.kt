@@ -64,6 +64,10 @@ class SyncClient {
         uploadFile("$baseUrl/api/characters/$uuid/photo", "photo", file)
     }
 
+    suspend fun uploadLocationPhoto(locationUuid: String, file: File): Boolean = withContext(Dispatchers.IO) {
+        uploadFile("$baseUrl/api/locations/$locationUuid/photos", "photo", file)
+    }
+
     suspend fun uploadBookCover(uuid: String, file: File): Boolean = withContext(Dispatchers.IO) {
         uploadFile("$baseUrl/api/books/$uuid/cover", "cover", file)
     }
@@ -94,6 +98,7 @@ class SyncClient {
     }
 
     fun getCharacterPhotoUrl(uuid: String) = "$baseUrl/api/characters/$uuid/photo"
+    fun getLocationPhotoUrl(locationUuid: String, photoUuid: String) = "$baseUrl/api/locations/$locationUuid/photos/$photoUuid"
     fun getBookCoverUrl(uuid: String) = "$baseUrl/api/books/$uuid/cover"
     fun getPageImageUrl(pageUuid: String) = "$baseUrl/api/books/pages/$pageUuid/image"
 

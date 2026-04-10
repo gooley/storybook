@@ -17,6 +17,8 @@ import com.gooley.storybook.ui.bookshelf.BookshelfScreen
 import com.gooley.storybook.ui.characters.CharactersScreen
 import com.gooley.storybook.ui.characters.EditCharacterScreen
 import com.gooley.storybook.ui.create.CreateBookScreen
+import com.gooley.storybook.ui.locations.EditLocationScreen
+import com.gooley.storybook.ui.locations.LocationsScreen
 import com.gooley.storybook.ui.reader.ReaderScreen
 
 object Routes {
@@ -26,9 +28,13 @@ object Routes {
     const val CHARACTERS = "characters"
     const val EDIT_CHARACTER = "character/edit/{characterId}"
     const val ADD_CHARACTER = "character/add"
+    const val LOCATIONS = "locations"
+    const val ADD_LOCATION = "location/add"
+    const val EDIT_LOCATION = "location/edit/{locationId}"
 
     fun reader(bookId: Long) = "reader/$bookId"
     fun editCharacter(id: Long) = "character/edit/$id"
+    fun editLocation(id: Long) = "location/edit/$id"
 }
 
 @Composable
@@ -38,6 +44,7 @@ fun NavGraph() {
     val repository = BookRepository(context)
     val db = StorybookDatabase.getInstance(context)
     val characterDao = db.characterDao()
+    val locationDao = db.locationDao()
 
     NavHost(navController = navController, startDestination = Routes.BOOKSHELF) {
         composable(Routes.BOOKSHELF) { backStackEntry ->
@@ -57,6 +64,7 @@ fun NavGraph() {
                 onBookClick = { bookId -> navController.navigate(Routes.reader(bookId)) },
                 onCreateClick = { navController.navigate(Routes.CREATE) },
                 onCharactersClick = { navController.navigate(Routes.CHARACTERS) },
+                onLocationsClick = { navController.navigate(Routes.LOCATIONS) },
                 onSyncClick = { SyncWorker.syncNow(context) }
             )
         }
@@ -77,6 +85,7 @@ fun NavGraph() {
             CreateBookScreen(
                 repository = repository,
                 characterDao = characterDao,
+                locationDao = locationDao,
                 onBookCreated = { bookId ->
                     navController.navigate(Routes.reader(bookId)) {
                         popUpTo(Routes.BOOKSHELF)
@@ -112,6 +121,37 @@ fun NavGraph() {
             EditCharacterScreen(
                 characterDao = characterDao,
                 characterId = characterId,
+                onSaved = { navController.popBackStack() },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.LOCATIONS) {
+            LocationsScreen(
+                locationDao = locationDao,
+                onAddClick = { navController.navigate(Routes.ADD_LOCATION) },
+                onEditClick = { id -> navController.navigate(Routes.editLocation(id)) },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.ADD_LOCATION) {
+            EditLocationScreen(
+                locationDao = locationDao,
+                locationId = null,
+                onSaved = { navController.popBackStack() },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Routes.EDIT_LOCATION,
+            arguments = listOf(navArgument("locationId") { type = NavType.LongType })
+        ) { backStackEntry ->
+            val locationId = backStackEntry.arguments?.getLong("locationId") ?: return@composable
+            EditLocationScreen(
+                locationDao = locationDao,
+                locationId = locationId,
                 onSaved = { navController.popBackStack() },
                 onBack = { navController.popBackStack() }
             )
