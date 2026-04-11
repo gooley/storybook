@@ -10,6 +10,7 @@ import {
   pollGenerationStatus,
   getAvailableModels,
   getBookGenerationParams,
+  uploadElementPhotos,
   type Character,
   type LocationWithPhotos,
   type GenerationStatus,
@@ -33,6 +34,8 @@ export function CreateBook() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [locations, setLocations] = useState<LocationWithPhotos[]>([]);
   const [selectedLocationIds, setSelectedLocationIds] = useState<Set<string>>(new Set());
+  const [elementFiles, setElementFiles] = useState<File[]>([]);
+  const [elementPreviews, setElementPreviews] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [variationTitle, setVariationTitle] = useState<string | null>(null);
 
@@ -113,6 +116,27 @@ export function CreateBook() {
     });
   };
 
+  const handleElementPhotos = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const maxNew = 5 - elementFiles.length;
+    const toAdd = files.slice(0, maxNew);
+    if (toAdd.length === 0) return;
+
+    setElementFiles((prev) => [...prev, ...toAdd]);
+
+    for (const file of toAdd) {
+      const url = URL.createObjectURL(file);
+      setElementPreviews((prev) => [...prev, url]);
+    }
+    e.target.value = "";
+  };
+
+  const removeElementPhoto = (index: number) => {
+    URL.revokeObjectURL(elementPreviews[index]);
+    setElementFiles((prev) => prev.filter((_, i) => i !== index));
+    setElementPreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const startPolling = (jobId: string, bookId: string) => {
     startTimeRef.current = Date.now();
 
@@ -178,11 +202,19 @@ export function CreateBook() {
     }
 
     try {
+      // Upload element photos if any
+      let elementPhotoPaths: string[] = [];
+      if (elementFiles.length > 0) {
+        const uploadResult = await uploadElementPhotos(elementFiles);
+        elementPhotoPaths = uploadResult.photos.map((p) => p.path);
+      }
+
       const result = await startGeneration({
         description: description.trim(),
         pageCount,
         characterIds: Array.from(selectedIds),
         locationIds: Array.from(selectedLocationIds),
+        elementPhotoPaths,
         ...modelOverrides,
       });
       startPolling(result.jobId, result.bookId);
@@ -322,6 +354,37 @@ export function CreateBook() {
               </div>
             </div>
           )}
+
+          {/* Element Photos */}
+          <div className="form-group">
+            <label>Element Photos</label>
+            <p className="form-hint">Attach photos of items or details to include in the illustrations</p>
+            <div className="element-photos">
+              {elementPreviews.map((url, i) => (
+                <div key={i} className="element-photo-thumb">
+                  <img src={url} alt={`Element ${i + 1}`} />
+                  <button
+                    className="element-photo-remove"
+                    onClick={() => removeElementPhoto(i)}
+                    type="button"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              {elementFiles.length < 5 && (
+                <label className="element-photo-add">
+                  <span>+</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleElementPhotos}
+                  />
+                </label>
+              )}
+            </div>
+          </div>
 
           {/* Model Settings */}
           {modelLists && (

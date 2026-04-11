@@ -15,6 +15,7 @@ fs.mkdirSync(path.join(DATA_DIR, "uploads", "illustrations"), {
   recursive: true,
 });
 fs.mkdirSync(path.join(DATA_DIR, "uploads", "locations"), { recursive: true });
+fs.mkdirSync(path.join(DATA_DIR, "uploads", "elements"), { recursive: true });
 
 const db: import("better-sqlite3").Database = new Database(DB_PATH);
 

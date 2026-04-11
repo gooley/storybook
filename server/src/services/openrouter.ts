@@ -380,7 +380,8 @@ export async function generateIllustration(
   characters: CharacterRef[],
   locations: LocationRef[],
   model?: string,
-  visualDirection?: string
+  visualDirection?: string,
+  elementPhotoPaths?: string[]
 ): Promise<GenerationResult<boolean>> {
   const useModel = model || DEFAULT_ILLUSTRATION_MODEL;
   const uploadsDir = getUploadsDir();
@@ -435,6 +436,19 @@ export async function generateIllustration(
     prompt += `\nUse these location reference photos to capture the look and feel of the setting in the illustration.\n\n`;
   }
 
+  // Element reference photos
+  const validElementPaths = (elementPhotoPaths || []).filter((p: string) =>
+    fs.existsSync(path.join(uploadsDir, p))
+  );
+  if (validElementPaths.length > 0) {
+    prompt += `Element reference photos (items/details to include in the illustration):\n`;
+    const refs = validElementPaths.map(() => {
+      refPhotoCount++;
+      return `reference photo ${refPhotoCount}`;
+    });
+    prompt += `See ${refs.join(", ")} — incorporate these elements into the illustration.\n\n`;
+  }
+
   const hadReferenceImage = validPreviousPaths.length > 0;
   if (hadReferenceImage) {
     prompt += `I've attached the ${validPreviousPaths.length} previous page illustration(s) from this book. `;
@@ -482,6 +496,15 @@ export async function generateIllustration(
           parts.push(fileToBase64Part(scaled, "image/jpeg"));
           numImagesAttached++;
         }
+      }
+    }
+
+    for (const elemPath of validElementPaths) {
+      const fullPath = path.join(uploadsDir, elemPath);
+      if (fs.existsSync(fullPath)) {
+        const scaled = await scalePhoto(fullPath);
+        parts.push(fileToBase64Part(scaled, "image/jpeg"));
+        numImagesAttached++;
       }
     }
 
