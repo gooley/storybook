@@ -180,6 +180,127 @@ function parseStoryResponse(content: string): StoryResponse {
 
 // --- Public API ---
 
+/**
+ * Generates a per-page visual continuity plan by analyzing all page texts together.
+ * Returns an array of visual direction strings, one per page, describing what
+ * should be visually consistent/different on each page.
+ */
+export async function generateVisualContinuityPlan(
+  story: StoryResponse,
+  characters: CharacterRef[],
+  locations: LocationRef[],
+  model?: string
+): Promise<GenerationResult<string[]>> {
+  const useModel = model || DEFAULT_STORY_MODEL;
+  const startTime = Date.now();
+
+  let characterContext = "";
+  if (characters.length > 0) {
+    characterContext = "\n\nCharacters:\n";
+    for (const c of characters) {
+      characterContext += `- ${c.name}: ${c.description}\n`;
+    }
+  }
+
+  let locationContext = "";
+  if (locations.length > 0) {
+    locationContext += "\n\nLocations:\n";
+    for (const loc of locations) {
+      locationContext += `- ${loc.name}`;
+      if (loc.description) locationContext += `: ${loc.description}`;
+      locationContext += `\n`;
+    }
+  }
+
+  const allPagesText = story.pages
+    .map((p) => `Page ${p.pageNumber}: ${p.text}`)
+    .join("\n");
+
+  const systemPrompt = `You are an art director for a children's storybook illustration team. Your job is to ensure visual consistency across all pages by writing precise visual directions for each page's illustration.
+
+For EACH page, describe:
+- Character poses, expressions, and actions (what exactly are they doing?)
+- Clothing/costumes/accessories (what is each character wearing? track changes explicitly)
+- Setting details (where are they? what's in the background? time of day? lighting?)
+- Key props and objects (what items are present? where are they positioned?)
+- Any visual changes from the previous page (what specifically changed and what stayed the same?)
+
+CRITICAL RULES:
+- If a character puts on a costume/outfit on page 1, they must STILL be wearing it on subsequent pages unless the story explicitly says they changed.
+- If a character falls asleep, they stay asleep until the story says they wake up (and vice versa).
+- Track the physical state of every character and prop across pages. Be explicit about what persists.
+- Note the setting/background for each page — if the scene hasn't changed, the background should match.
+
+Format your response as a JSON array of strings, one per page. Each string should be a concise visual direction paragraph (3-5 sentences).
+Return ONLY the JSON array, no other text.`;
+
+  const userPrompt = `Here is the full story for "${story.title}":
+${characterContext}${locationContext}
+
+${allPagesText}
+
+Write visual directions for each of the ${story.pages.length} pages to ensure illustration consistency.`;
+
+  try {
+    const response = await makeRequest({
+      model: useModel,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    });
+
+    const content = response.choices?.[0]?.message?.content;
+    if (!content) throw new Error("No response from LLM");
+
+    // Parse the JSON array from the response
+    let jsonStr = content
+      .replace(/```json\s*/g, "")
+      .replace(/```\s*/g, "")
+      .trim();
+
+    const arrStart = jsonStr.indexOf("[");
+    const arrEnd = jsonStr.lastIndexOf("]");
+    if (arrStart >= 0 && arrEnd > arrStart) {
+      jsonStr = jsonStr.substring(arrStart, arrEnd + 1);
+    }
+
+    const directions = JSON.parse(jsonStr) as string[];
+
+    return {
+      data: directions,
+      model: useModel,
+      prompt: userPrompt,
+      systemPrompt,
+      responseText: content,
+      responseModel: extractResponseModel(response),
+      numImagesAttached: 0,
+      hadReferenceImage: false,
+      characterRefsJson: null,
+      success: true,
+      errorMessage: null,
+      durationMs: Date.now() - startTime,
+    };
+  } catch (e: any) {
+    console.error("Visual continuity plan generation error:", e);
+    // Return empty array on failure — illustrations can still proceed without it
+    return {
+      data: [],
+      model: useModel,
+      prompt: userPrompt,
+      systemPrompt,
+      responseText: null,
+      responseModel: null,
+      numImagesAttached: 0,
+      hadReferenceImage: false,
+      characterRefsJson: null,
+      success: false,
+      errorMessage: e.message || "Unknown error",
+      durationMs: Date.now() - startTime,
+    };
+  }
+}
+
 export async function generateStory(
   description: string,
   pageCount: number,
@@ -258,7 +379,8 @@ export async function generateIllustration(
   previousImagePaths: string[],
   characters: CharacterRef[],
   locations: LocationRef[],
-  model?: string
+  model?: string,
+  visualDirection?: string
 ): Promise<GenerationResult<boolean>> {
   const useModel = model || DEFAULT_ILLUSTRATION_MODEL;
   const uploadsDir = getUploadsDir();
@@ -317,6 +439,11 @@ export async function generateIllustration(
   if (hadReferenceImage) {
     prompt += `I've attached the ${validPreviousPaths.length} previous page illustration(s) from this book. `;
     prompt += `Study them carefully and keep a consistent art style, color palette, and character designs throughout.\n\n`;
+  }
+
+  if (visualDirection) {
+    prompt += `VISUAL DIRECTION FOR THIS PAGE (from the art director — follow carefully):\n`;
+    prompt += `${visualDirection}\n\n`;
   }
 
   prompt += `Style: Sharp pen and ink illustration with bold lines. `;

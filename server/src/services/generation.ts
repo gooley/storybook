@@ -7,6 +7,7 @@ import {
   generateStory,
   generateIllustration,
   generateCover,
+  generateVisualContinuityPlan,
   CharacterRef,
   LocationRef,
   GenerationResult,
@@ -311,6 +312,28 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
 
   if (isJobCancelled(job.id)) return;
 
+  // Step 1b: Generate visual continuity plan
+  updateJobStatus(job.id, {
+    progress_message: "Planning visual continuity across pages...",
+  });
+
+  const continuityResult = await generateVisualContinuityPlan(
+    story,
+    characters,
+    locations,
+    storyModel
+  );
+  const visualDirections = continuityResult.data;
+
+  saveGenerationLog(continuityResult, {
+    jobId: job.id,
+    bookId,
+    pageId: null,
+    stepType: "story",
+  });
+
+  if (isJobCancelled(job.id)) return;
+
   // Step 2: Generate illustrations serially — each receives all previous images for consistency
   const completedImagePaths: string[] = [];
   const completedPageIds: string[] = [];
@@ -338,7 +361,8 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
       completedImagePaths,
       characters,
       locations,
-      illustrationModel
+      illustrationModel,
+      visualDirections[i] || undefined
     );
     const success = illusResult.data;
 
