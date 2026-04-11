@@ -7,6 +7,7 @@ import { Books } from "./pages/Books";
 import { CreateBook } from "./pages/CreateBook";
 import { Reader } from "./pages/Reader";
 import { BookDebug } from "./pages/BookDebug";
+import { AllImages } from "./pages/AllImages";
 import "./index.css";
 
 function App() {
@@ -30,6 +31,7 @@ function App() {
             <Route path="/locations" element={<Locations />} />
             <Route path="/reader/:bookId" element={<Reader />} />
             <Route path="/reader/:bookId/debug" element={<BookDebug />} />
+            <Route path="/reader/:bookId/images" element={<AllImages />} />
           </Routes>
         </main>
       </div>
