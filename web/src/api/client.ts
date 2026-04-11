@@ -126,6 +126,20 @@ export const deleteLocationPhoto = (locationId: string, photoId: string) =>
 export const getLocationPhotoUrl = (locationId: string, photoId: string) =>
   `${BASE}/locations/${locationId}/photos/${photoId}`;
 
+// Element Photos API (per-story uploads)
+export async function uploadElementPhotos(files: File[]): Promise<{ photos: { path: string }[] }> {
+  const form = new FormData();
+  for (const file of files) {
+    form.append("photos", file);
+  }
+  const res = await fetch(`${BASE}/generate/element-photos`, { method: "POST", body: form });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Upload failed: ${body}`);
+  }
+  return res.json();
+}
+
 export const getBooks = () => request<Book[]>("/books");
 export const updateBook = (id: string, data: Partial<Book>) =>
   request<Book>(`/books/${id}`, { method: "PUT", body: JSON.stringify(data) });
@@ -140,6 +154,7 @@ export const startGeneration = (data: {
   pageCount: number;
   characterIds: string[];
   locationIds: string[];
+  elementPhotoPaths?: string[];
   bookId?: string;
   storyModel?: string;
   illustrationModel?: string;

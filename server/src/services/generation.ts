@@ -246,7 +246,7 @@ function enrichDescription(
 
 async function executeGenerateBook(job: GenerationJob): Promise<void> {
   const payload = JSON.parse(job.request_payload);
-  const { description, pageCount, characterIds, locationIds, bookId } = payload;
+  const { description, pageCount, characterIds, locationIds, elementPhotoPaths, bookId } = payload;
   // Optional model overrides
   const storyModel: string | undefined = payload.storyModel;
   const illustrationModel: string | undefined = payload.illustrationModel;
@@ -362,7 +362,8 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
       characters,
       locations,
       illustrationModel,
-      visualDirections[i] || undefined
+      visualDirections[i] || undefined,
+      elementPhotoPaths || []
     );
     const success = illusResult.data;
 

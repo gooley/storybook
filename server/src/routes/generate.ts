@@ -1,6 +1,9 @@
 import { Router, Request, Response } from "express";
+import multer from "multer";
+import path from "path";
+import { v4 as uuidv4 } from "uuid";
 import { nanoid } from "../utils";
-import db from "../db";
+import db, { getUploadsDir } from "../db";
 import {
   getJobStatus,
   getActiveJobs,
@@ -8,6 +11,28 @@ import {
 } from "../services/generation";
 
 const router = Router();
+
+const MAX_ELEMENT_PHOTOS = 5;
+
+const elementUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      cb(null, path.join(getUploadsDir(), "elements"));
+    },
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname) || ".jpg";
+      cb(null, `${uuidv4()}${ext}`);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only image files are allowed"));
+    }
+  },
+});
 
 // Rate limit config
 const MAX_ACTIVE_JOBS = 1;
@@ -46,9 +71,28 @@ function checkRateLimits(): string | null {
   return null;
 }
 
+// POST /api/generate/element-photos — Upload element reference photos
+router.post(
+  "/element-photos",
+  elementUpload.array("photos", MAX_ELEMENT_PHOTOS),
+  (req: Request, res: Response) => {
+    const files = req.files as Express.Multer.File[];
+    if (!files || files.length === 0) {
+      res.status(400).json({ error: "No photo files provided" });
+      return;
+    }
+
+    const photos = files.map((f) => ({
+      path: `elements/${f.filename}`,
+    }));
+
+    res.json({ photos });
+  }
+);
+
 // POST /api/generate/book — Start a new book generation job
 router.post("/book", (req: Request, res: Response) => {
-  const { description, pageCount, characterIds, locationIds, bookId, storyModel, illustrationModel, coverModel } = req.body;
+  const { description, pageCount, characterIds, locationIds, elementPhotoPaths, bookId, storyModel, illustrationModel, coverModel } = req.body;
 
   // Validation
   if (!description || typeof description !== "string") {
@@ -67,6 +111,26 @@ router.post("/book", (req: Request, res: Response) => {
   if (locationIds && !Array.isArray(locationIds)) {
     res.status(400).json({ error: "locationIds must be an array" });
     return;
+  }
+
+  // Validate and sanitize element photo paths
+  const ELEMENT_PATH_RE = /^elements\/[a-f0-9-]+\.\w+$/;
+  let sanitizedElementPaths: string[] = [];
+  if (elementPhotoPaths) {
+    if (!Array.isArray(elementPhotoPaths)) {
+      res.status(400).json({ error: "elementPhotoPaths must be an array" });
+      return;
+    }
+    if (elementPhotoPaths.length > MAX_ELEMENT_PHOTOS) {
+      res.status(400).json({ error: `elementPhotoPaths must have at most ${MAX_ELEMENT_PHOTOS} entries` });
+      return;
+    }
+    const invalid = elementPhotoPaths.filter((p: any) => typeof p !== "string" || !ELEMENT_PATH_RE.test(p));
+    if (invalid.length > 0) {
+      res.status(400).json({ error: "Invalid element photo paths" });
+      return;
+    }
+    sanitizedElementPaths = elementPhotoPaths;
   }
 
   // Generate book ID (client-provided or server-generated)
@@ -147,6 +211,7 @@ router.post("/book", (req: Request, res: Response) => {
       pageCount: count,
       characterIds: characterIds || [],
       locationIds: locationIds || [],
+      elementPhotoPaths: sanitizedElementPaths,
       bookId: resolvedBookId,
       ...(storyModel && { storyModel }),
       ...(illustrationModel && { illustrationModel }),
