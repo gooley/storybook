@@ -17,6 +17,7 @@ import {
   type ModelLists,
 } from "../api/client";
 import { ModelSelector } from "../components/ModelSelector";
+import { PhotoSourcePicker } from "../components/PhotoSourcePicker";
 
 const PAGE_COUNT_OPTIONS = [2, 4, 8];
 const POLL_INTERVAL_FAST = 2000;
@@ -116,8 +117,7 @@ export function CreateBook() {
     });
   };
 
-  const handleElementPhotos = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+  const handleElementPhotos = (files: File[]) => {
     const maxNew = 5 - elementFiles.length;
     const toAdd = files.slice(0, maxNew);
     if (toAdd.length === 0) return;
@@ -128,7 +128,6 @@ export function CreateBook() {
       const url = URL.createObjectURL(file);
       setElementPreviews((prev) => [...prev, url]);
     }
-    e.target.value = "";
   };
 
   const removeElementPhoto = (index: number) => {
@@ -373,15 +372,11 @@ export function CreateBook() {
                 </div>
               ))}
               {elementFiles.length < 5 && (
-                <label className="element-photo-add">
-                  <span>+</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleElementPhotos}
-                  />
-                </label>
+                <PhotoSourcePicker onFiles={handleElementPhotos} multiple>
+                  <div className="element-photo-add">
+                    <span>+</span>
+                  </div>
+                </PhotoSourcePicker>
               )}
             </div>
           </div>

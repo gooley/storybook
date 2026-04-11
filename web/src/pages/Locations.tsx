@@ -4,6 +4,7 @@ import {
   uploadLocationPhoto, deleteLocationPhoto, getLocationPhotoUrl,
   type LocationWithPhotos, type LocationPhoto,
 } from "../api/client";
+import { PhotoSourcePicker } from "../components/PhotoSourcePicker";
 
 const MAX_PHOTOS = 3;
 
@@ -101,13 +102,11 @@ function LocationFormModal({ location, onSave, onClose, onReload }: {
   const totalPhotos = existingPhotos.length + newPhotos.length;
   const canAddMore = totalPhotos < MAX_PHOTOS;
 
-  const handleAddPhotos = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+  const handleAddPhotos = (files: File[]) => {
     const remaining = MAX_PHOTOS - totalPhotos;
     const toAdd = files.slice(0, remaining);
     setNewPhotos((prev) => [...prev, ...toAdd]);
     setNewPreviews((prev) => [...prev, ...toAdd.map((f) => URL.createObjectURL(f))]);
-    e.target.value = "";
   };
 
   const handleRemoveExisting = async (photo: LocationPhoto) => {
@@ -164,14 +163,15 @@ function LocationFormModal({ location, onSave, onClose, onReload }: {
                 </div>
               ))}
               {canAddMore && (
-                <label style={{
-                  width: 100, height: 100, border: "2px dashed var(--border)", borderRadius: 8,
-                  display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-                  fontSize: 24, color: "var(--text-muted)",
-                }}>
-                  +
-                  <input type="file" accept="image/*" onChange={handleAddPhotos} style={{ display: "none" }} />
-                </label>
+                <PhotoSourcePicker onFiles={handleAddPhotos} multiple>
+                  <div style={{
+                    width: 100, height: 100, border: "2px dashed var(--border)", borderRadius: 8,
+                    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                    fontSize: 24, color: "var(--text-muted)",
+                  }}>
+                    +
+                  </div>
+                </PhotoSourcePicker>
               )}
             </div>
           </div>
