@@ -2,8 +2,8 @@ import fs from "fs";
 import path from "path";
 import sharp from "sharp";
 import { getUploadsDir } from "../db";
+import { getOpenRouterKey } from "./config";
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 // Default models
@@ -184,8 +184,9 @@ async function buildImagePart(
 }
 
 async function makeRequest(request: ChatRequest): Promise<any> {
-  if (!OPENROUTER_API_KEY) {
-    throw new Error("OPENROUTER_API_KEY not configured");
+  const apiKey = getOpenRouterKey();
+  if (!apiKey) {
+    throw new Error("OPENROUTER_API_KEY not configured. Complete setup at the app's web interface.");
   }
 
   const body: Record<string, any> = {
@@ -213,7 +214,7 @@ async function makeRequest(request: ChatRequest): Promise<any> {
   const response = await fetch(OPENROUTER_URL, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),

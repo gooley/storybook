@@ -393,3 +393,54 @@ body {
 .element-photo-add:hover { border-color: var(--primary); }
 .element-photo-add span { font-size: 1.5rem; color: var(--text-muted); }
 .element-photo-add input { display: none; }
+
+/* Setup & Login Pages */
+.setup-page {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: var(--bg); padding: 24px;
+}
+.setup-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 40px; max-width: 480px; width: 100%;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.08); text-align: center;
+}
+.setup-emoji { font-size: 4rem; margin-bottom: 16px; }
+.setup-card h1 { font-size: 1.75rem; margin-bottom: 8px; }
+.setup-card h2 { font-size: 1.4rem; margin-bottom: 8px; }
+.setup-subtitle { color: var(--text-muted); margin-bottom: 24px; font-size: 1rem; }
+.setup-step {
+  font-size: 0.8rem; color: var(--primary); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;
+}
+.setup-form { text-align: left; }
+.setup-form .form-group { margin-bottom: 16px; }
+.setup-btn { width: 100%; padding: 14px; font-size: 1.05rem; margin-top: 8px; }
+.setup-error {
+  background: #fee; color: #c44; padding: 10px 14px; border-radius: var(--radius);
+  font-size: 0.9rem; border: 1px solid #fcc; margin-bottom: 8px;
+}
+.setup-checklist {
+  list-style: none; text-align: left; margin-bottom: 24px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.setup-checklist li {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 1rem; color: var(--text);
+}
+.setup-checklist .check {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--primary-light); color: var(--primary);
+  font-weight: 600; font-size: 0.85rem; flex-shrink: 0;
+}
+.setup-instructions { text-align: left; margin-bottom: 20px; }
+.setup-instructions h3 { font-size: 1rem; margin-bottom: 8px; }
+.setup-instructions ol {
+  padding-left: 20px; display: flex; flex-direction: column; gap: 6px;
+  font-size: 0.95rem; margin-bottom: 12px;
+}
+.setup-instructions a { color: var(--primary); }
+.setup-cost-note {
+  background: var(--primary-light); padding: 10px 14px; border-radius: var(--radius);
+  font-size: 0.85rem; color: var(--text);
+}
