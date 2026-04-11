@@ -12,11 +12,16 @@ const router = Router();
 
 const COOKIE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
+function buildCookie(value: string, maxAgeSeconds: number): string {
+  let cookie = `storybook_session=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}`;
+  if (process.env.NODE_ENV === "production") {
+    cookie += "; Secure";
+  }
+  return cookie;
+}
+
 function setSessionCookie(res: Response, token: string): void {
-  res.setHeader(
-    "Set-Cookie",
-    `storybook_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${COOKIE_MAX_AGE_MS / 1000}`
-  );
+  res.setHeader("Set-Cookie", buildCookie(token, COOKIE_MAX_AGE_MS / 1000));
 }
 
 // POST /api/auth/login
@@ -94,10 +99,7 @@ router.post("/change-password", (req: Request, res: Response) => {
 
 // POST /api/auth/logout
 router.post("/logout", (_req: Request, res: Response) => {
-  res.setHeader(
-    "Set-Cookie",
-    "storybook_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
-  );
+  res.setHeader("Set-Cookie", buildCookie("", 0));
   res.json({ success: true });
 });
 

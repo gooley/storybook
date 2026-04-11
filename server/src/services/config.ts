@@ -86,6 +86,8 @@ export function validateSessionToken(token: string): boolean {
   const createdAt = getSetting("session_created_at");
   if (!stored || !createdAt) return false;
   if (Date.now() - parseInt(createdAt, 10) > SESSION_TTL_MS) return false;
+  // Reject malformed tokens before timingSafeEqual (which throws on length mismatch)
+  if (!/^[0-9a-f]{64}$/i.test(token)) return false;
   return crypto.timingSafeEqual(
     Buffer.from(token, "hex"),
     Buffer.from(stored, "hex")
