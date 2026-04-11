@@ -11,6 +11,7 @@ import {
   CharacterRef,
   LocationRef,
   GenerationResult,
+  TraceMetadata,
 } from "./openrouter";
 
 // --- Generation Log Helper ---
@@ -275,7 +276,11 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
   const enrichedDescription = enrichDescription(description, characters, locations);
 
   // Step 1: Generate story text
-  const storyResult = await generateStory(enrichedDescription, pageCount, storyModel);
+  const storyResult = await generateStory(enrichedDescription, pageCount, storyModel, {
+    bookId,
+    stepType: "story",
+    totalPages: pageCount,
+  });
   const story = storyResult.data;
 
   saveGenerationLog(storyResult, {
@@ -321,7 +326,12 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
     story,
     characters,
     locations,
-    storyModel
+    storyModel,
+    {
+      bookId,
+      stepType: "continuity",
+      totalPages: pageCount,
+    }
   );
   const visualDirections = continuityResult.data;
 
@@ -363,7 +373,13 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
       locations,
       illustrationModel,
       visualDirections[i] || undefined,
-      elementPhotoPaths || []
+      elementPhotoPaths || [],
+      {
+        bookId,
+        stepType: "illustration",
+        pageNumber: i + 1,
+        totalPages: pageCount,
+      }
     );
     const success = illusResult.data;
 
@@ -404,7 +420,12 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
     story.title,
     firstImagePath,
     coverPath,
-    coverModel
+    coverModel,
+    {
+      bookId,
+      stepType: "cover",
+      totalPages: pageCount,
+    }
   );
   const coverSuccess = coverResult.data;
 
@@ -528,7 +549,16 @@ async function executeRegenerateIllustrations(
       imagePath,
       existingImagePaths,
       characters,
-      locations
+      locations,
+      undefined,
+      undefined,
+      undefined,
+      {
+        bookId,
+        stepType: "illustration",
+        pageNumber: page.page_number,
+        totalPages: pages.length,
+      }
     );
     const success = illusResult.data;
 
@@ -630,7 +660,10 @@ async function executeRegenerateCovers(job: GenerationJob): Promise<void> {
       }
 
       const coverPath = path.join(coversDir, `${book.id}.png`);
-      const coverResult = await generateCover(book.title, firstPageImagePath, coverPath);
+      const coverResult = await generateCover(book.title, firstPageImagePath, coverPath, undefined, {
+        bookId: book.id,
+        stepType: "cover",
+      });
       const success = coverResult.data;
 
       saveGenerationLog(coverResult, {

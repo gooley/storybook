@@ -54,12 +54,21 @@ interface ChatMessage {
   content: any;
 }
 
+/** Optional metadata sent to OpenRouter for broadcast/observability tracing */
+export interface TraceMetadata {
+  bookId?: string;
+  stepType?: "story" | "continuity" | "illustration" | "cover";
+  pageNumber?: number;
+  totalPages?: number;
+}
+
 interface ChatRequest {
   model: string;
   messages: ChatMessage[];
   temperature?: number;
   max_tokens?: number;
   modalities?: string[];
+  trace?: TraceMetadata;
 }
 
 async function scalePhoto(photoPath: string): Promise<Buffer> {
@@ -103,6 +112,18 @@ async function makeRequest(request: ChatRequest): Promise<any> {
   };
   if (request.modalities) {
     body.modalities = request.modalities;
+  }
+
+  // OpenRouter broadcast metadata
+  if (request.trace?.bookId) {
+    body.session_id = request.trace.bookId;
+    body.trace = {
+      trace_id: request.trace.bookId,
+      trace_name: "Storybook Generation",
+      generation_name: request.trace.stepType || "unknown",
+      ...(request.trace.pageNumber != null && { page_number: request.trace.pageNumber }),
+      ...(request.trace.totalPages != null && { total_pages: request.trace.totalPages }),
+    };
   }
 
   const response = await fetch(OPENROUTER_URL, {
@@ -189,7 +210,8 @@ export async function generateVisualContinuityPlan(
   story: StoryResponse,
   characters: CharacterRef[],
   locations: LocationRef[],
-  model?: string
+  model?: string,
+  trace?: TraceMetadata
 ): Promise<GenerationResult<string[]>> {
   const useModel = model || DEFAULT_STORY_MODEL;
   const startTime = Date.now();
@@ -248,6 +270,7 @@ Write visual directions for each of the ${story.pages.length} pages to ensure il
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
+      trace,
     });
 
     const content = response.choices?.[0]?.message?.content;
@@ -344,7 +367,8 @@ function pickNarrativeStyle(): (typeof NARRATIVE_STYLES)[number] {
 export async function generateStory(
   description: string,
   pageCount: number,
-  model?: string
+  model?: string,
+  trace?: TraceMetadata
 ): Promise<GenerationResult<StoryResponse>> {
   const useModel = model || DEFAULT_STORY_MODEL;
   const style = pickNarrativeStyle();
@@ -384,6 +408,7 @@ Return ONLY the JSON object, no other text.`;
         { role: "user", content: userPrompt },
       ],
       temperature: 1.0,
+      trace,
     });
 
     const content = response.choices?.[0]?.message?.content;
@@ -433,7 +458,8 @@ export async function generateIllustration(
   locations: LocationRef[],
   model?: string,
   visualDirection?: string,
-  elementPhotoPaths?: string[]
+  elementPhotoPaths?: string[],
+  trace?: TraceMetadata
 ): Promise<GenerationResult<boolean>> {
   const useModel = model || DEFAULT_ILLUSTRATION_MODEL;
   const uploadsDir = getUploadsDir();
@@ -574,6 +600,7 @@ export async function generateIllustration(
     const response = await makeRequest({
       model: useModel,
       messages: [{ role: "user", content: parts }],
+      trace,
     });
 
     const imageBuffer = extractImageData(response);
@@ -634,7 +661,8 @@ export async function generateCover(
   title: string,
   firstPageImagePath: string,
   outputPath: string,
-  model?: string
+  model?: string,
+  trace?: TraceMetadata
 ): Promise<GenerationResult<boolean>> {
   const useModel = model || DEFAULT_COVER_MODEL;
   const startTime = Date.now();
@@ -663,6 +691,7 @@ export async function generateCover(
       model: useModel,
       messages: [{ role: "user", content: parts }],
       modalities: ["image"],
+      trace,
     });
 
     const imageBuffer = extractImageData(response);
