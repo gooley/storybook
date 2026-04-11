@@ -78,6 +78,90 @@ async function scalePhoto(photoPath: string): Promise<Buffer> {
     .toBuffer();
 }
 
+/** How many of the most recent pages to send individually (downscaled). */
+const RECENT_PAGE_COUNT = 2;
+
+/** Max dimension for individually-sent recent pages. */
+const RECENT_PAGE_MAX_DIM = 768;
+
+/** Max dimension for each thumbnail in the storyboard composite. */
+const STORYBOARD_THUMB_DIM = 384;
+
+/**
+ * Downscale an illustration for sending as a recent-page reference.
+ * Smaller than full-res but larger than storyboard thumbnails.
+ */
+async function scaleIllustration(filePath: string): Promise<Buffer> {
+  return sharp(filePath)
+    .resize(RECENT_PAGE_MAX_DIM, RECENT_PAGE_MAX_DIM, {
+      fit: "inside",
+      withoutEnlargement: true,
+    })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+}
+
+/**
+ * Compose multiple illustration files into a single storyboard grid image.
+ * Each thumbnail is labeled with its page number. Returns a JPEG buffer.
+ */
+async function buildStoryboardComposite(
+  imagePaths: string[]
+): Promise<Buffer | null> {
+  const existing = imagePaths.filter((p) => fs.existsSync(p));
+  if (existing.length === 0) return null;
+
+  // Determine grid layout — prefer wider grids since illustrations are landscape
+  const count = existing.length;
+  const cols = Math.min(count, Math.ceil(Math.sqrt(count * 1.5)));
+  const rows = Math.ceil(count / cols);
+
+  const thumbW = STORYBOARD_THUMB_DIM;
+  // Illustrations are landscape, so thumbs should be wider than tall
+  const thumbH = Math.round(STORYBOARD_THUMB_DIM * 0.65);
+  const padding = 4;
+  const labelH = 18;
+
+  const canvasW = cols * (thumbW + padding) + padding;
+  const canvasH = rows * (thumbH + padding + labelH) + padding;
+
+  // Build each thumbnail
+  const composites: sharp.OverlayOptions[] = [];
+  for (let i = 0; i < existing.length; i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = padding + col * (thumbW + padding);
+    const y = padding + row * (thumbH + padding + labelH);
+
+    // Resize the illustration to thumbnail dimensions
+    const thumb = await sharp(existing[i])
+      .resize(thumbW, thumbH, { fit: "cover" })
+      .toBuffer();
+
+    composites.push({ input: thumb, left: x, top: y + labelH });
+
+    // Create a small label like "Page 1"
+    const labelSvg = Buffer.from(
+      `<svg width="${thumbW}" height="${labelH}">
+        <text x="2" y="13" font-family="sans-serif" font-size="12" fill="#333">Page ${i + 1}</text>
+      </svg>`
+    );
+    composites.push({ input: labelSvg, left: x, top: y });
+  }
+
+  return sharp({
+    create: {
+      width: canvasW,
+      height: canvasH,
+      channels: 3,
+      background: { r: 255, g: 255, b: 255 },
+    },
+  })
+    .composite(composites)
+    .jpeg({ quality: 85 })
+    .toBuffer();
+}
+
 function fileToBase64Part(
   data: Buffer,
   mimeType: string
@@ -530,7 +614,13 @@ export async function generateIllustration(
 
   const hadReferenceImage = validPreviousPaths.length > 0;
   if (hadReferenceImage) {
-    prompt += `I've attached the ${validPreviousPaths.length} previous page illustration(s) from this book. `;
+    const recentCount = Math.min(validPreviousPaths.length, RECENT_PAGE_COUNT);
+    const olderCount = validPreviousPaths.length - recentCount;
+    if (olderCount > 0) {
+      prompt += `I've attached a storyboard grid of pages 1–${olderCount} from this book, plus the ${recentCount} most recent page(s) as individual images. `;
+    } else {
+      prompt += `I've attached the ${recentCount} previous page illustration(s) from this book. `;
+    }
     prompt += `Study them carefully and keep a consistent art style, color palette, and character designs throughout.\n\n`;
   }
 
@@ -587,11 +677,30 @@ export async function generateIllustration(
       }
     }
 
-    for (const prevPath of validPreviousPaths) {
-      const prevPart = await buildImagePart(prevPath);
-      if (prevPart) {
-        parts.push(prevPart);
-        numImagesAttached++;
+    // Attach previous page illustrations using hybrid composite strategy:
+    // - Older pages → composited into a single storyboard grid thumbnail
+    // - Most recent N pages → sent individually (downscaled) for fine detail
+    if (validPreviousPaths.length > 0) {
+      const recentCount = Math.min(validPreviousPaths.length, RECENT_PAGE_COUNT);
+      const olderPaths = validPreviousPaths.slice(0, -recentCount);
+      const recentPaths = validPreviousPaths.slice(-recentCount);
+
+      // Storyboard composite of older pages (if any)
+      if (olderPaths.length > 0) {
+        const composite = await buildStoryboardComposite(olderPaths);
+        if (composite) {
+          parts.push(fileToBase64Part(composite, "image/jpeg"));
+          numImagesAttached++;
+        }
+      }
+
+      // Recent pages sent individually at reduced resolution
+      for (const recentPath of recentPaths) {
+        if (fs.existsSync(recentPath)) {
+          const scaled = await scaleIllustration(recentPath);
+          parts.push(fileToBase64Part(scaled, "image/jpeg"));
+          numImagesAttached++;
+        }
       }
     }
 
