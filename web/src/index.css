@@ -133,7 +133,13 @@ body {
 .empty-state .emoji { font-size: 3rem; margin-bottom: 12px; }
 
 @media (max-width: 600px) {
-  .nav { flex-direction: column; gap: 8px; }
+  .nav { flex-direction: column; gap: 8px; padding: 12px 0; }
+  .nav-title { padding: 0 16px; }
+  .nav-links {
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    padding: 0 16px; width: 100%;
+  }
+  .nav-links a { white-space: nowrap; flex-shrink: 0; }
   .card-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
   .main { padding: 16px; }
 }
