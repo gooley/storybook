@@ -113,6 +113,26 @@ router.post("/book", (req: Request, res: Response) => {
     return;
   }
 
+  // Validate and sanitize element photo paths
+  const ELEMENT_PATH_RE = /^elements\/[a-f0-9-]+\.\w+$/;
+  let sanitizedElementPaths: string[] = [];
+  if (elementPhotoPaths) {
+    if (!Array.isArray(elementPhotoPaths)) {
+      res.status(400).json({ error: "elementPhotoPaths must be an array" });
+      return;
+    }
+    if (elementPhotoPaths.length > MAX_ELEMENT_PHOTOS) {
+      res.status(400).json({ error: `elementPhotoPaths must have at most ${MAX_ELEMENT_PHOTOS} entries` });
+      return;
+    }
+    const invalid = elementPhotoPaths.filter((p: any) => typeof p !== "string" || !ELEMENT_PATH_RE.test(p));
+    if (invalid.length > 0) {
+      res.status(400).json({ error: "Invalid element photo paths" });
+      return;
+    }
+    sanitizedElementPaths = elementPhotoPaths;
+  }
+
   // Generate book ID (client-provided or server-generated)
   const resolvedBookId = bookId || nanoid();
 
@@ -191,7 +211,7 @@ router.post("/book", (req: Request, res: Response) => {
       pageCount: count,
       characterIds: characterIds || [],
       locationIds: locationIds || [],
-      elementPhotoPaths: elementPhotoPaths || [],
+      elementPhotoPaths: sanitizedElementPaths,
       bookId: resolvedBookId,
       ...(storyModel && { storyModel }),
       ...(illustrationModel && { illustrationModel }),

@@ -437,9 +437,10 @@ export async function generateIllustration(
   }
 
   // Element reference photos
-  const validElementPaths = (elementPhotoPaths || []).filter((p: string) =>
-    fs.existsSync(path.join(uploadsDir, p))
-  );
+  const elementPathsArray = Array.isArray(elementPhotoPaths) ? elementPhotoPaths : [];
+  const validElementPaths = elementPathsArray
+    .filter((p: string) => typeof p === "string" && !p.includes(".."))
+    .filter((p: string) => fs.existsSync(path.join(uploadsDir, p)));
   if (validElementPaths.length > 0) {
     prompt += `Element reference photos (items/details to include in the illustration):\n`;
     const refs = validElementPaths.map(() => {
