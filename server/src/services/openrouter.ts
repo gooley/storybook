@@ -301,13 +301,57 @@ Write visual directions for each of the ${story.pages.length} pages to ensure il
   }
 }
 
+// Narrative styles randomly assigned to each story for variety
+const NARRATIVE_STYLES = [
+  {
+    label: "whimsical",
+    instruction: "Write in a whimsical, playful tone with surprising turns and silly moments. Use bouncy, rhythmic language.",
+  },
+  {
+    label: "adventurous",
+    instruction: "Write an exciting adventure story with a sense of wonder and discovery. Use action verbs and build suspense between pages.",
+  },
+  {
+    label: "cozy",
+    instruction: "Write a warm, gentle story with a cozy atmosphere. Focus on comfort, togetherness, and small meaningful moments.",
+  },
+  {
+    label: "curious",
+    instruction: "Write a story driven by curiosity and questions. Let the main character explore, investigate, and figure things out.",
+  },
+  {
+    label: "lyrical",
+    instruction: "Write in a poetic, lyrical style with vivid sensory details — sounds, textures, smells, colors. Make the language itself beautiful.",
+  },
+  {
+    label: "humorous",
+    instruction: "Write a genuinely funny story with unexpected twists, wordplay, or absurd situations that will make kids laugh out loud.",
+  },
+  {
+    label: "mysterious",
+    instruction: "Write a story with a gentle mystery or puzzle to solve. Build intrigue and let clues unfold page by page.",
+  },
+  {
+    label: "empathetic",
+    instruction: "Write a story centered on feelings and relationships. Show characters navigating emotions like frustration, pride, nervousness, or joy in relatable ways.",
+  },
+];
+
+function pickNarrativeStyle(): (typeof NARRATIVE_STYLES)[number] {
+  return NARRATIVE_STYLES[Math.floor(Math.random() * NARRATIVE_STYLES.length)];
+}
+
 export async function generateStory(
   description: string,
   pageCount: number,
   model?: string
 ): Promise<GenerationResult<StoryResponse>> {
   const useModel = model || DEFAULT_STORY_MODEL;
-  const systemPrompt = `You are a children's storybook author. Write a short, engaging story for young children (ages 3-7).
+  const style = pickNarrativeStyle();
+
+  const systemPrompt = `You are a talented children's storybook author with a distinctive voice. Write a short, engaging story for young children (ages 3-7).
+
+Narrative style for this story: ${style.instruction}
 
 Rules:
 - The story must have exactly ${pageCount} pages
@@ -316,6 +360,13 @@ Rules:
 - The story should have a clear beginning, middle, and end
 - Include descriptive scenes that would make good illustrations
 - Do NOT describe characters' physical appearances in the text (e.g. don't say "Dana, a 3 year old with curly blonde hair"). The reader already knows the characters — just use their names naturally.
+
+Variety and freshness:
+- Avoid overused children's book clichés. In particular, do NOT use "giggled", "tummy", or "magical" — find fresher alternatives.
+- Vary how you express emotions — instead of always saying a character laughed or giggled, try: gasped, whispered, clapped, bounced, squealed, beamed, grinned, cheered, hummed, or showed emotion through actions.
+- Each story should feel distinct. Vary sentence structure, pacing, and vocabulary from story to story.
+- Prefer specific, concrete details over generic descriptions (e.g. "the puddle reflected the clouds" instead of "it was a beautiful day").
+- Give characters distinct reactions — not everyone responds the same way to every situation.
 
 Format your response as a JSON object with a "title" field and a "pages" array.
 Example: {"title": "The Brave Little Fox", "pages": [{"pageNumber": 1, "text": "Once upon a time..."}, {"pageNumber": 2, "text": "The next thing..."}]}
@@ -332,6 +383,7 @@ Return ONLY the JSON object, no other text.`;
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
+      temperature: 1.0,
     });
 
     const content = response.choices?.[0]?.message?.content;
