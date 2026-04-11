@@ -3,6 +3,7 @@ import {
   getCharacters, createCharacter, updateCharacter, deleteCharacter,
   uploadCharacterPhoto, getCharacterPhotoUrl, type Character,
 } from "../api/client";
+import { PhotoSourcePicker } from "../components/PhotoSourcePicker";
 
 export function Characters() {
   const [characters, setCharacters] = useState<Character[]>([]);
@@ -116,8 +117,8 @@ function FormModal({ character, onSave, onClose }: {
   );
   const [saving, setSaving] = useState(false);
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handlePhotoChange = (files: File[]) => {
+    const file = files[0];
     if (file) { setPhoto(file); setPhotoPreview(URL.createObjectURL(file)); }
   };
 
@@ -132,10 +133,11 @@ function FormModal({ character, onSave, onClose }: {
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h3>{character ? "Edit Character" : "New Character"}</h3>
         <form onSubmit={handleSubmit}>
-          <div className="photo-upload">
-            {photoPreview ? <img src={photoPreview} alt="Preview" /> : <span className="photo-upload-label">📷 Add Photo</span>}
-            <input type="file" accept="image/*" onChange={handlePhotoChange} />
-          </div>
+          <PhotoSourcePicker onFiles={handlePhotoChange}>
+            <div className="photo-upload">
+              {photoPreview ? <img src={photoPreview} alt="Preview" /> : <span className="photo-upload-label">📷 Add Photo</span>}
+            </div>
+          </PhotoSourcePicker>
           <div className="form-group">
             <label>Name</label>
             <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus />

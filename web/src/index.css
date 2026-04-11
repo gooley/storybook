@@ -400,6 +400,22 @@ body {
 .element-photo-add span { font-size: 1.5rem; color: var(--text-muted); }
 .element-photo-add input { display: none; }
 
+/* Photo Source Picker */
+.photo-source-picker { position: relative; display: inline-block; }
+.photo-source-menu {
+  position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15); z-index: 50;
+  min-width: 180px; overflow: hidden;
+}
+.photo-source-option {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 10px 14px; border: none; background: none;
+  font-size: 0.9rem; cursor: pointer; text-align: left; white-space: nowrap;
+}
+.photo-source-option:hover { background: var(--primary-light); }
+.photo-source-option + .photo-source-option { border-top: 1px solid var(--border); }
+
 /* Setup & Login Pages */
 .setup-page {
   min-height: 100vh; display: flex; align-items: center; justify-content: center;
