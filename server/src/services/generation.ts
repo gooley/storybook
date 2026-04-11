@@ -311,158 +311,96 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
 
   if (isJobCancelled(job.id)) return;
 
-  // Step 2: Generate page 1 illustration (sequential — style reference)
-  const firstPageId = pageIds[0];
-  const firstPageText = story.pages[0].text;
-  const firstImagePath = path.join(illustrationsDir, `${firstPageId}.png`);
+  // Step 2: Generate illustrations serially — each receives all previous images for consistency
+  const completedImagePaths: string[] = [];
+  const completedPageIds: string[] = [];
+  let completedSteps = 1;
 
-  // Mark page 1 as generating
-  db.prepare(
-    "UPDATE pages SET image_status = 'generating', updated_at = ? WHERE id = ?"
-  ).run(Date.now(), firstPageId);
+  for (let i = 0; i < story.pages.length; i++) {
+    if (isJobCancelled(job.id)) return;
 
-  updateJobStatus(job.id, {
-    progress_message: "Drawing illustration 1 of " + pageCount + "...",
-  });
+    const pageId = pageIds[i];
+    const pageText = story.pages[i].text;
+    const imagePath = path.join(illustrationsDir, `${pageId}.png`);
 
-  const firstResult = await generateIllustration(
-    firstPageText,
-    story.title,
-    firstImagePath,
-    null,
-    characters,
-    locations,
-    illustrationModel
-  );
-  const firstSuccess = firstResult.data;
-
-  saveGenerationLog(firstResult, {
-    jobId: job.id,
-    bookId,
-    pageId: firstPageId,
-    stepType: "illustration",
-  });
-
-  if (firstSuccess) {
     db.prepare(
-      "UPDATE pages SET image_path = ?, image_status = 'done', updated_at = ? WHERE id = ?"
-    ).run(`illustrations/${firstPageId}.png`, Date.now(), firstPageId);
+      "UPDATE pages SET image_status = 'generating', updated_at = ? WHERE id = ?"
+    ).run(Date.now(), pageId);
 
     updateJobStatus(job.id, {
-      completed_steps: 2,
-      progress_fraction: 2 / totalSteps,
-      first_illustration_ready: true,
-      completed_page_ids: [firstPageId],
+      progress_message: `Drawing illustration ${i + 1} of ${pageCount}...`,
     });
-  } else {
-    db.prepare(
-      "UPDATE pages SET image_status = 'error', updated_at = ? WHERE id = ?"
-    ).run(Date.now(), firstPageId);
+
+    const illusResult = await generateIllustration(
+      pageText,
+      story.title,
+      imagePath,
+      completedImagePaths,
+      characters,
+      locations,
+      illustrationModel
+    );
+    const success = illusResult.data;
+
+    saveGenerationLog(illusResult, {
+      jobId: job.id,
+      bookId,
+      pageId,
+      stepType: "illustration",
+    });
+
+    completedSteps++;
+    if (success) {
+      db.prepare(
+        "UPDATE pages SET image_path = ?, image_status = 'done', updated_at = ? WHERE id = ?"
+      ).run(`illustrations/${pageId}.png`, Date.now(), pageId);
+      completedPageIds.push(pageId);
+      completedImagePaths.push(imagePath);
+    } else {
+      db.prepare(
+        "UPDATE pages SET image_status = 'error', updated_at = ? WHERE id = ?"
+      ).run(Date.now(), pageId);
+    }
+
     updateJobStatus(job.id, {
-      completed_steps: 2,
-      progress_fraction: 2 / totalSteps,
+      progress_fraction: completedSteps / totalSteps,
+      completed_steps: completedSteps,
+      completed_page_ids: completedPageIds,
+      ...(i === 0 && success ? { first_illustration_ready: true } : {}),
     });
   }
 
   if (isJobCancelled(job.id)) return;
 
-  // Step 3: Generate remaining pages + cover in parallel (with concurrency limit)
-  const limit = pLimit(ILLUSTRATION_CONCURRENCY);
-  const completedPageIds: string[] = firstSuccess ? [firstPageId] : [];
-  let completedSteps = 2;
+  // Step 3: Generate cover using first page image
+  const firstImagePath = completedImagePaths.length > 0 ? completedImagePaths[0] : "";
+  const coverPath = path.join(coversDir, `${bookId}.png`);
+  const coverResult = await generateCover(
+    story.title,
+    firstImagePath,
+    coverPath,
+    coverModel
+  );
+  const coverSuccess = coverResult.data;
 
-  const tasks: Promise<void>[] = [];
+  saveGenerationLog(coverResult, {
+    jobId: job.id,
+    bookId,
+    pageId: null,
+    stepType: "cover",
+  });
 
-  // Remaining page illustrations
-  for (let i = 1; i < story.pages.length; i++) {
-    const pageId = pageIds[i];
-    const pageText = story.pages[i].text;
-    const imagePath = path.join(illustrationsDir, `${pageId}.png`);
-
-    tasks.push(
-      limit(async () => {
-        if (isJobCancelled(job.id)) return;
-
-        db.prepare(
-          "UPDATE pages SET image_status = 'generating', updated_at = ? WHERE id = ?"
-        ).run(Date.now(), pageId);
-
-        const illusResult = await generateIllustration(
-          pageText,
-          story.title,
-          imagePath,
-          firstSuccess ? firstImagePath : null,
-          characters,
-          locations,
-          illustrationModel
-        );
-        const success = illusResult.data;
-
-        saveGenerationLog(illusResult, {
-          jobId: job.id,
-          bookId,
-          pageId,
-          stepType: "illustration",
-        });
-
-        completedSteps++;
-        if (success) {
-          db.prepare(
-            "UPDATE pages SET image_path = ?, image_status = 'done', updated_at = ? WHERE id = ?"
-          ).run(`illustrations/${pageId}.png`, Date.now(), pageId);
-          completedPageIds.push(pageId);
-        } else {
-          db.prepare(
-            "UPDATE pages SET image_status = 'error', updated_at = ? WHERE id = ?"
-          ).run(Date.now(), pageId);
-        }
-
-        updateJobStatus(job.id, {
-          progress_message: `Drawing illustration ${completedSteps - 1} of ${pageCount}...`,
-          progress_fraction: completedSteps / totalSteps,
-          completed_steps: completedSteps,
-          completed_page_ids: completedPageIds,
-        });
-      })
-    );
+  completedSteps++;
+  if (coverSuccess) {
+    db.prepare(
+      "UPDATE books SET cover_image_path = ?, updated_at = ? WHERE id = ?"
+    ).run(`covers/${bookId}.png`, Date.now(), bookId);
   }
 
-  // Cover generation
-  tasks.push(
-    limit(async () => {
-      if (isJobCancelled(job.id)) return;
-
-      const coverPath = path.join(coversDir, `${bookId}.png`);
-      const coverResult = await generateCover(
-        story.title,
-        firstSuccess ? firstImagePath : "",
-        coverPath,
-        coverModel
-      );
-      const success = coverResult.data;
-
-      saveGenerationLog(coverResult, {
-        jobId: job.id,
-        bookId,
-        pageId: null,
-        stepType: "cover",
-      });
-
-      completedSteps++;
-      if (success) {
-        db.prepare(
-          "UPDATE books SET cover_image_path = ?, updated_at = ? WHERE id = ?"
-        ).run(`covers/${bookId}.png`, Date.now(), bookId);
-      }
-
-      updateJobStatus(job.id, {
-        progress_fraction: completedSteps / totalSteps,
-        completed_steps: completedSteps,
-      });
-    })
-  );
-
-  await Promise.all(tasks);
+  updateJobStatus(job.id, {
+    progress_fraction: completedSteps / totalSteps,
+    completed_steps: completedSteps,
+  });
 
   // Mark book as ready
   db.prepare(
@@ -535,70 +473,67 @@ async function executeRegenerateIllustrations(
     started_at: Date.now(),
   });
 
-  // Find page 1 image as style reference
-  const page1 = pages[0];
-  let referenceImagePath: string | null = null;
-  if (page1?.image_path) {
-    const fullPath = path.join(uploadsDir, page1.image_path);
-    if (fs.existsSync(fullPath)) referenceImagePath = fullPath;
+  // Collect existing illustration paths (in page order) as style references
+  const existingImagePaths: string[] = [];
+  for (const p of pages) {
+    if (p.image_path && p.image_status === "done") {
+      const fullPath = path.join(uploadsDir, p.image_path);
+      if (fs.existsSync(fullPath)) existingImagePaths.push(fullPath);
+    }
   }
 
   // Load characters from description (no character IDs stored for regen)
   const characters: CharacterRef[] = [];
   const locations: LocationRef[] = [];
 
-  const limit = pLimit(ILLUSTRATION_CONCURRENCY);
   const completedPageIds: string[] = [];
   let completedSteps = 0;
 
-  const tasks = needsRegen.map((page) =>
-    limit(async () => {
-      if (isJobCancelled(job.id)) return;
+  for (const page of needsRegen) {
+    if (isJobCancelled(job.id)) return;
 
-      const imagePath = path.join(illustrationsDir, `${page.id}.png`);
+    const imagePath = path.join(illustrationsDir, `${page.id}.png`);
+    db.prepare(
+      "UPDATE pages SET image_status = 'generating', updated_at = ? WHERE id = ?"
+    ).run(Date.now(), page.id);
+
+    const illusResult = await generateIllustration(
+      page.text,
+      book.title,
+      imagePath,
+      existingImagePaths,
+      characters,
+      locations
+    );
+    const success = illusResult.data;
+
+    saveGenerationLog(illusResult, {
+      jobId: job.id,
+      bookId,
+      pageId: page.id,
+      stepType: "illustration",
+    });
+
+    completedSteps++;
+    if (success) {
       db.prepare(
-        "UPDATE pages SET image_status = 'generating', updated_at = ? WHERE id = ?"
+        "UPDATE pages SET image_path = ?, image_status = 'done', updated_at = ? WHERE id = ?"
+      ).run(`illustrations/${page.id}.png`, Date.now(), page.id);
+      completedPageIds.push(page.id);
+      existingImagePaths.push(imagePath);
+    } else {
+      db.prepare(
+        "UPDATE pages SET image_status = 'error', updated_at = ? WHERE id = ?"
       ).run(Date.now(), page.id);
+    }
 
-      const illusResult = await generateIllustration(
-        page.text,
-        book.title,
-        imagePath,
-        referenceImagePath,
-        characters,
-        locations
-      );
-      const success = illusResult.data;
-
-      saveGenerationLog(illusResult, {
-        jobId: job.id,
-        bookId,
-        pageId: page.id,
-        stepType: "illustration",
-      });
-
-      completedSteps++;
-      if (success) {
-        db.prepare(
-          "UPDATE pages SET image_path = ?, image_status = 'done', updated_at = ? WHERE id = ?"
-        ).run(`illustrations/${page.id}.png`, Date.now(), page.id);
-        completedPageIds.push(page.id);
-      } else {
-        db.prepare(
-          "UPDATE pages SET image_status = 'error', updated_at = ? WHERE id = ?"
-        ).run(Date.now(), page.id);
-      }
-
-      updateJobStatus(job.id, {
-        progress_message: `Regenerated ${completedSteps} of ${totalSteps} illustrations`,
-        progress_fraction: completedSteps / totalSteps,
-        completed_steps: completedSteps,
-        completed_page_ids: completedPageIds,
-      });
-    })
-  );
-
-  await Promise.all(tasks);
+    updateJobStatus(job.id, {
+      progress_message: `Regenerated ${completedSteps} of ${totalSteps} illustrations`,
+      progress_fraction: completedSteps / totalSteps,
+      completed_steps: completedSteps,
+      completed_page_ids: completedPageIds,
+    });
+  }
 
   updateJobStatus(job.id, {
     status: "done",
