@@ -4,6 +4,7 @@ services:
     restart: unless-stopped
     environment:
     - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    - AUTH_MODE=external
     - NODE_ENV=production
     - DATA_DIR=/app/data
     volumes:

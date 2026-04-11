@@ -1,36 +1,121 @@
-# Storybook
+# Storybook 📚✨
 
-A personalized children's storybook generator. Uses AI to create illustrated stories featuring your family and friends. Designed for a 6" color e-ink tablet, with a web companion for managing characters and browsing stories.
+Make personalized, AI-illustrated storybooks starring your kids, family, and friends.
 
-## Architecture
+Add photos of the people in your child's life, and Storybook generates unique illustrated stories featuring them as characters. Each story is one-of-a-kind, with custom illustrations that look like the people your kids know and love.
+
+## Deploy Your Own
+
+The easiest way to run your own Storybook is on **Railway** — one click, no terminal required.
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.app/template/storybook)
+
+**What you'll need:**
+- A [Railway](https://railway.app) account (~$5/month)
+- An [OpenRouter](https://openrouter.ai) API key (for AI story + image generation, ~$1-5/month depending on usage)
+
+**That's it!** After deploying, the app walks you through setting up your password and API key — no config files or terminals needed.
+
+> **Your data is private.** Stories, photos, and all data stay on your own server. Password protection is required during setup.
+
+### Other Deployment Options
+
+<details>
+<summary>Deploy on Fly.io (~$2.40/month, requires CLI)</summary>
+
+See [docs/deploy-fly.md](docs/deploy-fly.md) for a step-by-step guide.
+
+</details>
+
+<details>
+<summary>Run with Docker</summary>
+
+```bash
+docker run -d \
+  -p 3000:3000 \
+  -v storybook-data:/app/data \
+  -e DATA_DIR=/app/data \
+  ghcr.io/gooley/storybook:latest
+```
+
+Open http://localhost:3000 and the setup wizard will guide you through the rest.
+
+</details>
+
+## How Much Does It Cost?
+
+| Component | Cost | Notes |
+|-----------|------|-------|
+| **Hosting** (Railway) | ~$5/month | Often within free trial credits |
+| **AI generation** (OpenRouter) | ~$1-5/month | Depends on how many stories you make |
+| **Total** | **~$6-10/month** | For a typical family making 5-20 stories/month |
+
+OpenRouter lets you choose which AI models to use. Cheaper models work great for most stories.
+
+## FAQ
+
+<details>
+<summary>Is my family's data safe?</summary>
+
+Yes. Everything runs on your own server — photos, stories, and data are never shared with anyone. The app requires a password to access. AI models process your prompts but don't store them (see OpenRouter's privacy policy).
+</details>
+
+<details>
+<summary>How do I get an OpenRouter API key?</summary>
+
+See [docs/getting-openrouter-key.md](docs/getting-openrouter-key.md) for a step-by-step guide with screenshots. It takes about 2 minutes.
+</details>
+
+<details>
+<summary>Can I use this on a tablet?</summary>
+
+Yes! There's an Android companion app designed for e-ink tablets. See [android/README.md](android/README.md) for build instructions.
+</details>
+
+---
+
+## Development
+
+<details>
+<summary>Architecture</summary>
 
 ```
 ├── android/     # Kotlin/Compose Android app (local-first, syncs to server)
 ├── server/      # Node.js/Express API (SQLite, image storage)
 └── web/         # React SPA (character management, story browser)
 ```
+</details>
 
-Deployed on gool3yhost at `storybook.gool3y.com`.
-
-## Android App
-
-See [android/README.md](android/README.md) for build/install instructions.
+<details>
+<summary>Local development</summary>
 
 ```bash
-cd android
-export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
-./gradlew assembleDebug
-```
+# Server (API on :3000)
+cd server && npm install && npm run dev
 
-## Server + Web
+# Web (dev server on :5173)  
+cd web && npm install && npm run dev
+```
+</details>
+
+<details>
+<summary>Environment variables</summary>
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DATA_DIR` | No | `./data` | Where SQLite DB and uploads are stored |
+| `OPENROUTER_API_KEY` | No* | — | OpenRouter API key (*can be set via in-app wizard instead) |
+| `AUTH_MODE` | No | `local` | `local` = in-app password auth, `external` = skip auth (for reverse proxy setups) |
+| `PORT` | No | `3000` | Server port |
+
+</details>
+
+<details>
+<summary>Docker Compose (self-managed)</summary>
 
 ```bash
-cd server && npm install && npm run dev    # API on :3000
-cd web && npm install && npm run dev       # Dev server on :5173
+docker compose up -d
 ```
 
-## Deploy
-
-```bash
-gool3yhost app deploy
-```
+See `docker-compose.yml` for the full configuration.
+</details>

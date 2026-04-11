@@ -132,6 +132,12 @@ export function migrate(): void {
 
     CREATE INDEX IF NOT EXISTS idx_locations_updated ON locations(updated_at);
     CREATE INDEX IF NOT EXISTS idx_location_photos_location ON location_photos(location_id);
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at INTEGER DEFAULT 0
+    );
   `);
 
   // Migration: add hidden column to books (safe to run on existing DBs)
