@@ -4,7 +4,7 @@ import { getAuthMode, validateSessionToken, getSetupStatus } from "../services/c
 /**
  * Auth middleware.
  * - AUTH_MODE=external: all requests pass through (external proxy handles auth)
- * - AUTH_MODE=local: requires valid session token cookie, except public endpoints
+ * - AUTH_MODE=local: requires valid session token via cookie or Bearer header
  */
 export function authMiddleware(
   req: Request,
@@ -38,14 +38,23 @@ export function authMiddleware(
     return;
   }
 
-  // Check session token from cookie
-  const token = parseCookie(req.headers.cookie || "", "storybook_session");
+  // Check session token from cookie OR Authorization: Bearer header
+  const token =
+    parseBearerToken(req.headers.authorization) ||
+    parseCookie(req.headers.cookie || "", "storybook_session");
+
   if (!token || !validateSessionToken(token)) {
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
 
   next();
+}
+
+function parseBearerToken(header: string | undefined): string | null {
+  if (!header) return null;
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1] : null;
 }
 
 function parseCookie(cookieHeader: string, name: string): string | null {

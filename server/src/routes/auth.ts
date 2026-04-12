@@ -44,7 +44,7 @@ router.post("/login", (req: Request, res: Response) => {
 
   const token = createSessionToken();
   setSessionCookie(res, token);
-  res.json({ success: true });
+  res.json({ success: true, token });
 });
 
 // GET /api/auth/check — check if current session is authenticated
@@ -54,12 +54,21 @@ router.get("/check", (req: Request, res: Response) => {
     return;
   }
 
-  const cookieHeader = req.headers.cookie || "";
-  const match = cookieHeader
-    .split(";")
-    .map((c) => c.trim())
-    .find((c) => c.startsWith("storybook_session="));
-  const token = match ? decodeURIComponent(match.split("=")[1]) : null;
+  // Check Bearer token first, then cookie
+  let token: string | null = null;
+  const authHeader = req.headers.authorization;
+  if (authHeader) {
+    const match = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (match) token = match[1];
+  }
+  if (!token) {
+    const cookieHeader = req.headers.cookie || "";
+    const cookieMatch = cookieHeader
+      .split(";")
+      .map((c) => c.trim())
+      .find((c) => c.startsWith("storybook_session="));
+    token = cookieMatch ? decodeURIComponent(cookieMatch.split("=")[1]) : null;
+  }
 
   if (token && validateSessionToken(token)) {
     res.json({ authenticated: true, authMode: "local" });
