@@ -8,7 +8,7 @@ Add photos of the people in your child's life, and Storybook generates unique il
 
 The easiest way to run your own Storybook is on **Railway** — one click, no terminal required.
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.app/template/storybook)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/6S3bY5?referralCode=WHKJ8C)
 
 **What you'll need:**
 - A [Railway](https://railway.app) account (~$5/month)

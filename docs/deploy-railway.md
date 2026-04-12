@@ -11,7 +11,7 @@ Railway is the easiest way to host your own Storybook. No terminal or coding exp
 
 Click this button:
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.app/template/storybook)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/6S3bY5?referralCode=WHKJ8C)
 
 This creates your own Storybook server with:
 - A web service running the app
