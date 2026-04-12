@@ -72,6 +72,7 @@ fun ReaderScreen(
 
     var currentPage by remember { mutableIntStateOf(0) }
     var showExitOverlay by remember { mutableStateOf(false) }
+    var showTextBar by remember { mutableStateOf(true) }
 
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -155,10 +156,11 @@ fun ReaderScreen(
                                 if (currentPage > 0) {
                                     currentPage--
                                     showExitOverlay = false
+                                    showTextBar = true
                                 }
                             }
                     )
-                    // Center 60% — toggle exit overlay
+                    // Center 60% — toggle exit overlay (and hide text in landscape)
                     Box(
                         modifier = Modifier
                             .weight(3f)
@@ -168,6 +170,7 @@ fun ReaderScreen(
                                 indication = null
                             ) {
                                 showExitOverlay = !showExitOverlay
+                                if (isLandscape) showTextBar = !showTextBar
                             }
                     )
                     // Right 20% — next page
@@ -182,30 +185,37 @@ fun ReaderScreen(
                                 if (currentPage < pages.size - 1) {
                                     currentPage++
                                     showExitOverlay = false
+                                    showTextBar = true
                                 }
                             }
                     )
                 }
             }
 
-            // Layer 3: landscape bottom text bar — always visible, semi-transparent
+            // Layer 3: landscape bottom text bar — visible by default, toggles with center tap
             if (isLandscape) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .background(Color.Black.copy(alpha = 0.65f))
-                        .padding(horizontal = 32.dp, vertical = 16.dp)
+                AnimatedVisibility(
+                    visible = showTextBar,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier.align(Alignment.BottomCenter)
                 ) {
-                    Text(
-                        text = pages[currentPage].text,
-                        fontSize = 18.sp,
-                        lineHeight = 26.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        color = Color.White,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.Black.copy(alpha = 0.65f))
+                            .padding(horizontal = 32.dp, vertical = 16.dp)
+                    ) {
+                        Text(
+                            text = pages[currentPage].text,
+                            fontSize = 18.sp,
+                            lineHeight = 26.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            color = Color.White,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
 
