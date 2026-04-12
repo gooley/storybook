@@ -46,7 +46,12 @@ class AudioManager {
             ambientPlayer?.setVolume(0.5f, 0.5f)
             return
         }
-        val path = audioList[index].audioPath ?: return
+        val path = audioList[index].audioPath
+        if (path == null) {
+            // Skip entries with no local file, continue to next
+            playSfxSequence(audioList, index + 1)
+            return
+        }
 
         try {
             sfxPlayer = MediaPlayer().apply {
