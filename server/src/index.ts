@@ -4,6 +4,7 @@ import express from "express";
 import cors from "cors";
 import { migrate } from "./db";
 import { authMiddleware } from "./middleware/auth";
+import { requestLogger } from "./middleware/logger";
 import charactersRouter from "./routes/characters";
 import locationsRouter from "./routes/locations";
 import booksRouter from "./routes/books";
@@ -38,6 +39,7 @@ process.on("SIGINT", () => {
 });
 
 // Middleware
+app.use(requestLogger);
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
