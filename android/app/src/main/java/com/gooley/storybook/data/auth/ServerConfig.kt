@@ -31,6 +31,22 @@ object ServerConfig {
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
+        migrateFromBuildConfig()
+    }
+
+    /**
+     * If BuildConfig has SYNC_API_URL/SYNC_API_KEY baked in at build time
+     * and ServerConfig hasn't been configured yet, auto-populate from those
+     * values so the user skips the setup screen.
+     */
+    private fun migrateFromBuildConfig() {
+        if (isConfigured) return
+        val buildUrl = com.gooley.storybook.BuildConfig.SYNC_API_URL
+        val buildKey = com.gooley.storybook.BuildConfig.SYNC_API_KEY
+        if (buildUrl.isNotEmpty() && buildKey.isNotEmpty()) {
+            serverUrl = buildUrl
+            authToken = buildKey
+        }
     }
 
     private fun requirePrefs(): SharedPreferences =

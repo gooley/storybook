@@ -6,6 +6,14 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+import java.util.Properties
+
+val localProperties = Properties()
+val localPropsFile = rootProject.file("local.properties")
+if (localPropsFile.exists()) {
+    localPropsFile.inputStream().use { localProperties.load(it) }
+}
+
 android {
     namespace = "com.gooley.storybook"
     compileSdk = 35
@@ -16,6 +24,19 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
+
+        // Optional build-time defaults — if set in local.properties, the app
+        // auto-configures on first launch and skips the setup screen.
+        buildConfigField(
+            "String",
+            "SYNC_API_URL",
+            "\"${localProperties.getProperty("SYNC_API_URL", "")}\""
+        )
+        buildConfigField(
+            "String",
+            "SYNC_API_KEY",
+            "\"${localProperties.getProperty("SYNC_API_KEY", "")}\""
+        )
     }
 
     buildTypes {
