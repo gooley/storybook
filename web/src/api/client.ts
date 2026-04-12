@@ -223,6 +223,8 @@ export interface GenerationLog {
   had_reference_image: number;
   response_text: string | null;
   response_model: string | null;
+  input_image_paths_json: string | null;
+  output_image_path: string | null;
   success: number;
   error_message: string | null;
   duration_ms: number | null;
@@ -231,6 +233,9 @@ export interface GenerationLog {
 
 export const getBookGenerationLogs = (bookId: string) =>
   request<GenerationLog[]>(`/books/${bookId}/generation-logs`);
+
+export const getUploadUrl = (relativePath: string) =>
+  `${BASE}/books/uploads/${relativePath}`;
 
 // Audio API
 export interface PageAudio {

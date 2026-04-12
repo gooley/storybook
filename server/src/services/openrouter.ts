@@ -44,6 +44,8 @@ export interface GenerationResult<T = void> {
   numImagesAttached: number;
   hadReferenceImage: boolean;
   characterRefsJson: string | null;
+  inputImagePaths: string[];
+  outputImagePath: string | null;
   success: boolean;
   errorMessage: string | null;
   durationMs: number;
@@ -442,6 +444,8 @@ Write visual directions and sound design for each of the ${story.pages.length} p
       numImagesAttached: 0,
       hadReferenceImage: false,
       characterRefsJson: null,
+      inputImagePaths: [],
+      outputImagePath: null,
       success: true,
       errorMessage: null,
       durationMs: Date.now() - startTime,
@@ -458,6 +462,8 @@ Write visual directions and sound design for each of the ${story.pages.length} p
       numImagesAttached: 0,
       hadReferenceImage: false,
       characterRefsJson: null,
+      inputImagePaths: [],
+      outputImagePath: null,
       success: false,
       errorMessage: e.message || "Unknown error",
       durationMs: Date.now() - startTime,
@@ -567,6 +573,8 @@ Return ONLY the JSON object, no other text.`;
       numImagesAttached: 0,
       hadReferenceImage: false,
       characterRefsJson: null,
+      inputImagePaths: [],
+      outputImagePath: null,
       success: true,
       errorMessage: null,
       durationMs: Date.now() - startTime,
@@ -582,6 +590,8 @@ Return ONLY the JSON object, no other text.`;
         numImagesAttached: 0,
         hadReferenceImage: false,
         characterRefsJson: null,
+        inputImagePaths: [],
+        outputImagePath: null,
         success: false,
         errorMessage: e.message || "Unknown error",
         durationMs: Date.now() - startTime,
@@ -606,6 +616,7 @@ export async function generateIllustration(
   const uploadsDir = getUploadsDir();
   const startTime = Date.now();
   let numImagesAttached = 0;
+  const inputImagePaths: string[] = [];
 
   // Filter to only paths that exist on disk
   const validPreviousPaths = previousImagePaths.filter((p) =>
@@ -699,6 +710,9 @@ export async function generateIllustration(
         )
       : null;
 
+  // Compute the output image path relative to uploads dir
+  const outputRelativePath = path.relative(uploadsDir, outputPath);
+
   try {
     // Build multimodal content: character photos first, then previous pages, then text
     const parts: Record<string, any>[] = [];
@@ -710,6 +724,7 @@ export async function generateIllustration(
           const scaled = await scalePhoto(fullPath);
           parts.push(fileToBase64Part(scaled, "image/jpeg"));
           numImagesAttached++;
+          inputImagePaths.push(c.photoPath);
         }
       }
     }
@@ -721,6 +736,7 @@ export async function generateIllustration(
           const scaled = await scalePhoto(fullPath);
           parts.push(fileToBase64Part(scaled, "image/jpeg"));
           numImagesAttached++;
+          inputImagePaths.push(photoPath);
         }
       }
     }
@@ -731,6 +747,7 @@ export async function generateIllustration(
         const scaled = await scalePhoto(fullPath);
         parts.push(fileToBase64Part(scaled, "image/jpeg"));
         numImagesAttached++;
+        inputImagePaths.push(elemPath);
       }
     }
 
@@ -749,6 +766,10 @@ export async function generateIllustration(
           parts.push(fileToBase64Part(composite, "image/jpeg"));
           numImagesAttached++;
         }
+        // Track all older pages as inputs (they were composited)
+        for (const olderPath of olderPaths) {
+          inputImagePaths.push(path.relative(uploadsDir, olderPath));
+        }
       }
 
       // Recent pages sent individually at reduced resolution
@@ -757,6 +778,7 @@ export async function generateIllustration(
           const scaled = await scaleIllustration(recentPath);
           parts.push(fileToBase64Part(scaled, "image/jpeg"));
           numImagesAttached++;
+          inputImagePaths.push(path.relative(uploadsDir, recentPath));
         }
       }
     }
@@ -783,6 +805,8 @@ export async function generateIllustration(
         numImagesAttached,
         hadReferenceImage,
         characterRefsJson,
+        inputImagePaths,
+        outputImagePath: outputRelativePath,
         success: true,
         errorMessage: null,
         durationMs: Date.now() - startTime,
@@ -800,6 +824,8 @@ export async function generateIllustration(
       numImagesAttached,
       hadReferenceImage,
       characterRefsJson,
+      inputImagePaths,
+      outputImagePath: null,
       success: false,
       errorMessage: "No image data in response",
       durationMs: Date.now() - startTime,
@@ -816,6 +842,8 @@ export async function generateIllustration(
       numImagesAttached,
       hadReferenceImage,
       characterRefsJson,
+      inputImagePaths,
+      outputImagePath: null,
       success: false,
       errorMessage: e.message || "Unknown error",
       durationMs: Date.now() - startTime,
@@ -831,6 +859,7 @@ export async function generateCover(
   trace?: TraceMetadata
 ): Promise<GenerationResult<boolean>> {
   const useModel = model || DEFAULT_COVER_MODEL;
+  const uploadsDir = getUploadsDir();
   const startTime = Date.now();
   const prompt =
     `Use this image as the basis for generating a book cover ` +
@@ -840,6 +869,8 @@ export async function generateCover(
 
   let numImagesAttached = 0;
   const hadReferenceImage = fs.existsSync(firstPageImagePath);
+  const inputImagePaths: string[] = [];
+  const outputRelativePath = path.relative(uploadsDir, outputPath);
 
   try {
     const parts: Record<string, any>[] = [];
@@ -850,6 +881,7 @@ export async function generateCover(
       if (imagePart) {
         parts.push(imagePart);
         numImagesAttached++;
+        inputImagePaths.push(path.relative(uploadsDir, firstPageImagePath));
       }
     }
 
@@ -874,6 +906,8 @@ export async function generateCover(
         numImagesAttached,
         hadReferenceImage,
         characterRefsJson: null,
+        inputImagePaths,
+        outputImagePath: outputRelativePath,
         success: true,
         errorMessage: null,
         durationMs: Date.now() - startTime,
@@ -891,6 +925,8 @@ export async function generateCover(
       numImagesAttached,
       hadReferenceImage,
       characterRefsJson: null,
+      inputImagePaths,
+      outputImagePath: null,
       success: false,
       errorMessage: "No image data in response",
       durationMs: Date.now() - startTime,
@@ -907,6 +943,8 @@ export async function generateCover(
       numImagesAttached,
       hadReferenceImage,
       characterRefsJson: null,
+      inputImagePaths,
+      outputImagePath: null,
       success: false,
       errorMessage: e.message || "Unknown error",
       durationMs: Date.now() - startTime,

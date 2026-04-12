@@ -29,8 +29,8 @@ function saveGenerationLog(
 ) {
   const id = nanoid();
   db.prepare(
-    `INSERT INTO generation_logs (id, job_id, book_id, page_id, step_type, model, prompt, system_prompt, character_refs_json, num_images_attached, had_reference_image, response_text, response_model, success, error_message, duration_ms, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO generation_logs (id, job_id, book_id, page_id, step_type, model, prompt, system_prompt, character_refs_json, num_images_attached, had_reference_image, response_text, response_model, success, error_message, duration_ms, input_image_paths_json, output_image_path, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     context.jobId,
@@ -48,6 +48,10 @@ function saveGenerationLog(
     result.success ? 1 : 0,
     result.errorMessage,
     result.durationMs,
+    result.inputImagePaths && result.inputImagePaths.length > 0
+      ? JSON.stringify(result.inputImagePaths)
+      : null,
+    result.outputImagePath ?? null,
     Date.now()
   );
 }
@@ -560,6 +564,8 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
               ? `Generated ${entry.audioType} audio (${result.durationSeconds?.toFixed(1)}s)\naudio_id:${entry.id}`
               : null,
             responseModel: "elevenlabs-sound-generation",
+            inputImagePaths: [],
+            outputImagePath: null,
             success: result.success,
             errorMessage: result.error ?? null,
             durationMs: audioDuration,
@@ -1051,6 +1057,8 @@ async function executeGenerateAudio(job: GenerationJob): Promise<void> {
             ? `Generated ${entry.audioType} audio (${result.durationSeconds?.toFixed(1)}s)\naudio_id:${entry.id}`
             : null,
           responseModel: "elevenlabs-sound-generation",
+          inputImagePaths: [],
+          outputImagePath: null,
           success: result.success,
           errorMessage: result.error ?? null,
           durationMs: audioDuration,

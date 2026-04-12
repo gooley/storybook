@@ -8,8 +8,12 @@ import {
   generateBookAudio,
   pollGenerationStatus,
   getAudioFileUrl,
+  getUploadUrl,
+  getPageImageUrl,
+  getBookCoverUrl,
   type Book,
   type GenerationLog,
+  type Page,
 } from "../api/client";
 
 const STEP_LABELS: Record<string, string> = {
@@ -41,13 +45,33 @@ function extractAudioId(responseText: string | null): string | null {
   return match ? match[1] : null;
 }
 
-function LogEntry({ log }: { log: GenerationLog }) {
+function LogEntry({ log, pages }: { log: GenerationLog; pages: Page[] }) {
   const [expanded, setExpanded] = useState(false);
   const isSuccess = log.success === 1;
   const characterRefs = log.character_refs_json
     ? JSON.parse(log.character_refs_json)
     : null;
   const audioId = log.step_type === "audio" ? extractAudioId(log.response_text) : null;
+
+  // Parse input image paths
+  const inputImagePaths: string[] = log.input_image_paths_json
+    ? JSON.parse(log.input_image_paths_json)
+    : [];
+
+  // Determine output image URL
+  let outputImageUrl: string | null = null;
+  if (log.output_image_path) {
+    outputImageUrl = getUploadUrl(log.output_image_path);
+  } else if (isSuccess) {
+    // Fallback for older logs without stored paths
+    if (log.step_type === "illustration" && log.page_id) {
+      outputImageUrl = getPageImageUrl(log.page_id);
+    } else if (log.step_type === "cover" && log.book_id) {
+      outputImageUrl = getBookCoverUrl(log.book_id);
+    }
+  }
+
+  const hasImages = inputImagePaths.length > 0 || outputImageUrl;
 
   return (
     <div
@@ -92,6 +116,44 @@ function LogEntry({ log }: { log: GenerationLog }) {
 
       {expanded && (
         <div className="debug-log-details" onClick={(e) => e.stopPropagation()}>
+          {hasImages && (
+            <div className="debug-log-section">
+              {inputImagePaths.length > 0 && (
+                <>
+                  <h4>Input Images ({inputImagePaths.length})</h4>
+                  <div className="debug-image-grid">
+                    {inputImagePaths.map((imgPath, i) => (
+                      <div key={i} className="debug-image-item">
+                        <img
+                          src={getUploadUrl(imgPath)}
+                          alt={`Input ${i + 1}`}
+                          loading="lazy"
+                        />
+                        <span className="debug-image-label" title={imgPath}>
+                          {imgPath.split("/").pop()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+              {outputImageUrl && (
+                <>
+                  <h4>Output Image</h4>
+                  <div className="debug-image-grid debug-image-output">
+                    <div className="debug-image-item">
+                      <img
+                        src={outputImageUrl}
+                        alt="Output"
+                        loading="lazy"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           <div className="debug-log-section">
             <h4>Prompt</h4>
             <pre className="debug-log-pre">{log.prompt}</pre>
@@ -173,6 +235,7 @@ export function BookDebug() {
   const navigate = useNavigate();
   const [book, setBook] = useState<Book | null>(null);
   const [logs, setLogs] = useState<GenerationLog[]>([]);
+  const [pages, setPages] = useState<Page[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("all");
   const [hasAudio, setHasAudio] = useState(false);
@@ -182,16 +245,17 @@ export function BookDebug() {
   const load = useCallback(async () => {
     if (!bookId) return;
     try {
-      const [b, l, pages] = await Promise.all([
+      const [b, l, p] = await Promise.all([
         getBook(bookId),
         getBookGenerationLogs(bookId),
         getBookPages(bookId),
       ]);
       setBook(b);
       setLogs(l);
+      setPages(p);
       // Check if any page has audio
-      if (pages.length > 0) {
-        const firstPageAudio = await getPageAudio(pages[0].id).catch(() => []);
+      if (p.length > 0) {
+        const firstPageAudio = await getPageAudio(p[0].id).catch(() => []);
         setHasAudio(firstPageAudio.length > 0);
       }
     } finally {
@@ -311,7 +375,7 @@ export function BookDebug() {
       ) : (
         <div className="debug-log-list">
           {filteredLogs.map((log) => (
-            <LogEntry key={log.id} log={log} />
+            <LogEntry key={log.id} log={log} pages={pages} />
           ))}
         </div>
       )}
