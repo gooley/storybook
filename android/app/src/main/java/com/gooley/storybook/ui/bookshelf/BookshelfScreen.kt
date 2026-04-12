@@ -1,5 +1,6 @@
 package com.gooley.storybook.ui.bookshelf
 
+import android.content.res.Configuration
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -81,11 +83,14 @@ fun BookshelfScreen(
             }
         }
     ) { innerPadding ->
+        val configuration = LocalConfiguration.current
+        val columns = if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) 3 else 2
+
         if (books.isEmpty()) {
             EmptyBookshelf(modifier = Modifier.padding(innerPadding))
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
+                columns = GridCells.Fixed(columns),
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
