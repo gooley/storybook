@@ -301,6 +301,40 @@ router.post("/:bookId/regenerate-illustrations", (req: Request, res: Response) =
   res.status(202).json({ jobId, bookId });
 });
 
+// POST /api/generate/:bookId/generate-audio — Generate sound effects for an existing book
+router.post("/:bookId/generate-audio", (req: Request, res: Response) => {
+  const bookId = req.params.bookId as string;
+
+  const book = db
+    .prepare("SELECT id FROM books WHERE id = ? AND deleted_at IS NULL")
+    .get(bookId) as { id: string } | undefined;
+  if (!book) {
+    res.status(404).json({ error: "Book not found" });
+    return;
+  }
+
+  const rateLimitError = checkRateLimits();
+  if (rateLimitError) {
+    res.status(429).json({ error: rateLimitError });
+    return;
+  }
+
+  const jobId = nanoid();
+  const now = Date.now();
+  db.prepare(
+    `INSERT INTO generation_jobs (id, book_id, status, request_payload, created_at, updated_at)
+     VALUES (?, ?, 'pending', ?, ?, ?)`
+  ).run(
+    jobId,
+    bookId,
+    JSON.stringify({ type: "generate_audio", bookId }),
+    now,
+    now
+  );
+
+  res.status(202).json({ jobId, bookId });
+});
+
 // POST /api/generate/regenerate-covers — Batch regenerate all covers
 router.post("/regenerate-covers", (_req: Request, res: Response) => {
   const rateLimitError = checkRateLimits();

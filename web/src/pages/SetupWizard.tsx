@@ -4,10 +4,12 @@ import {
   setPassword,
   validateApiKey,
   saveApiKey,
+  validateElevenLabsKey,
+  saveElevenLabsKey,
   login,
 } from "../api/setup";
 
-type Step = "welcome" | "password" | "apikey" | "done";
+type Step = "welcome" | "password" | "apikey" | "elevenlabs" | "done";
 
 export function SetupWizard({
   status,
@@ -26,6 +28,7 @@ export function SetupWizard({
   const [passwordVal, setPasswordVal] = useState("");
   const [confirmVal, setConfirmVal] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [elevenLabsKey, setElevenLabsKey] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -73,7 +76,7 @@ export function SetupWizard({
         return;
       }
       await saveApiKey(apiKey.trim());
-      setStep("done");
+      setStep("elevenlabs");
     } catch (err: any) {
       setError(err.message || "Failed to save API key");
     } finally {
@@ -220,6 +223,104 @@ export function SetupWizard({
               {loading ? "Validating..." : "Save & Continue →"}
             </button>
           </form>
+        </div>
+      </div>
+    );
+  }
+
+  const handleSaveElevenLabsKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!elevenLabsKey.trim()) {
+      setError("Please paste your API key");
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await validateElevenLabsKey(elevenLabsKey.trim());
+      if (!result.valid) {
+        setError(result.error || "Invalid API key");
+        setLoading(false);
+        return;
+      }
+      await saveElevenLabsKey(elevenLabsKey.trim());
+      setStep("done");
+    } catch (err: any) {
+      setError(err.message || "Failed to save API key");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (step === "elevenlabs") {
+    return (
+      <div className="setup-page">
+        <div className="setup-card">
+          <div className="setup-step">Optional</div>
+          <div className="setup-emoji">🔊</div>
+          <h2>Add Sound Effects</h2>
+          <p className="setup-subtitle">
+            Storybook can generate ambient soundscapes and sound effects for your stories using{" "}
+            <a
+              href="https://elevenlabs.io"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              ElevenLabs
+            </a>
+            . This is optional — stories work great without audio too.
+          </p>
+
+          <div className="setup-instructions">
+            <h3>How to get your API key:</h3>
+            <ol>
+              <li>
+                Go to{" "}
+                <a
+                  href="https://elevenlabs.io/app/settings/api-keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  elevenlabs.io/app/settings/api-keys
+                </a>
+              </li>
+              <li>Create an account (or sign in)</li>
+              <li>Click "Create API Key"</li>
+              <li>Copy the key and paste it below</li>
+            </ol>
+            <p className="setup-cost-note">
+              💡 The free tier includes 10,000 characters/month (~3 stories with audio).
+              The Starter plan ($5/mo) gives ~12 stories.
+            </p>
+          </div>
+
+          <form onSubmit={handleSaveElevenLabsKey} className="setup-form">
+            <div className="form-group">
+              <label>API Key</label>
+              <input
+                type="password"
+                value={elevenLabsKey}
+                onChange={(e) => setElevenLabsKey(e.target.value)}
+                placeholder="sk_..."
+                autoFocus
+              />
+            </div>
+            {error && <div className="setup-error">{error}</div>}
+            <button
+              type="submit"
+              className="btn btn-primary setup-btn"
+              disabled={loading || !elevenLabsKey.trim()}
+            >
+              {loading ? "Validating..." : "Save & Continue →"}
+            </button>
+          </form>
+          <button
+            className="btn btn-secondary"
+            style={{ marginTop: 8, width: "100%" }}
+            onClick={() => setStep("done")}
+          >
+            Skip for Now
+          </button>
         </div>
       </div>
     );

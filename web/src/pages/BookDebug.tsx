@@ -3,6 +3,10 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   getBook,
   getBookGenerationLogs,
+  getPageAudio,
+  getBookPages,
+  generateBookAudio,
+  pollGenerationStatus,
   type Book,
   type GenerationLog,
 } from "../api/client";
@@ -11,6 +15,8 @@ const STEP_LABELS: Record<string, string> = {
   story: "📝 Story",
   illustration: "🎨 Illustration",
   cover: "📕 Cover",
+  sound_design: "🎵 Sound Design",
+  audio: "🔊 Audio",
 };
 
 function formatDuration(ms: number | null): string {
@@ -152,16 +158,25 @@ export function BookDebug() {
   const [logs, setLogs] = useState<GenerationLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("all");
+  const [hasAudio, setHasAudio] = useState(false);
+  const [audioGenerating, setAudioGenerating] = useState(false);
+  const [audioProgress, setAudioProgress] = useState("");
 
   const load = useCallback(async () => {
     if (!bookId) return;
     try {
-      const [b, l] = await Promise.all([
+      const [b, l, pages] = await Promise.all([
         getBook(bookId),
         getBookGenerationLogs(bookId),
+        getBookPages(bookId),
       ]);
       setBook(b);
       setLogs(l);
+      // Check if any page has audio
+      if (pages.length > 0) {
+        const firstPageAudio = await getPageAudio(pages[0].id).catch(() => []);
+        setHasAudio(firstPageAudio.length > 0);
+      }
     } finally {
       setLoading(false);
     }
@@ -173,6 +188,35 @@ export function BookDebug() {
 
   if (loading) return <div className="empty-state">Loading…</div>;
   if (!book) return <div className="empty-state">Book not found</div>;
+
+  const handleGenerateAudio = async () => {
+    if (!bookId || audioGenerating) return;
+    setAudioGenerating(true);
+    setAudioProgress("Starting...");
+    try {
+      const { jobId } = await generateBookAudio(bookId);
+      // Poll for completion
+      while (true) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const status = await pollGenerationStatus(jobId);
+        setAudioProgress(status.progressMessage || "Generating...");
+        if (status.status === "done") {
+          setHasAudio(true);
+          setAudioProgress("");
+          load(); // Reload logs
+          break;
+        }
+        if (status.status === "error" || status.status === "cancelled") {
+          setAudioProgress(`Error: ${status.errorMessage || "Failed"}`);
+          break;
+        }
+      }
+    } catch (e: any) {
+      setAudioProgress(`Error: ${e.message}`);
+    } finally {
+      setAudioGenerating(false);
+    }
+  };
 
   const filteredLogs =
     filter === "all" ? logs : logs.filter((l) => l.step_type === filter);
@@ -203,6 +247,18 @@ export function BookDebug() {
           >
             🔄 Create Variation
           </button>
+          <button
+            className="btn btn-secondary"
+            onClick={handleGenerateAudio}
+            disabled={audioGenerating}
+          >
+            {audioGenerating ? "⏳" : hasAudio ? "🔊 Regenerate Audio" : "🔊 Generate Audio"}
+          </button>
+          {audioProgress && (
+            <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+              {audioProgress}
+            </span>
+          )}
         </div>
 
         <div className="debug-summary">
@@ -219,7 +275,7 @@ export function BookDebug() {
         </div>
 
         <div className="debug-filters">
-          {["all", "story", "illustration", "cover"].map((f) => (
+          {["all", "story", "illustration", "cover", "sound_design", "audio"].map((f) => (
             <button
               key={f}
               className={`debug-filter-btn ${filter === f ? "active" : ""}`}
