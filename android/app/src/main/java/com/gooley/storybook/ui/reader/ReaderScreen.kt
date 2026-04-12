@@ -137,71 +137,126 @@ fun ReaderScreen(
         if (currentPage >= pages.size) currentPage = pages.size - 1
 
         Box(modifier = Modifier.fillMaxSize()) {
+            // Layer 1: page content (image + text in portrait, image only in landscape)
             if (isLandscape) {
-                LandscapePageContent(
-                    page = pages[currentPage],
-                    showTextPanel = showTextPanel,
-                    onBack = onBack
-                )
+                LandscapePageContent(page = pages[currentPage])
             } else {
                 PortraitPageContent(page = pages[currentPage])
             }
 
-            // Invisible tap zones
-            Row(modifier = Modifier.fillMaxSize()) {
-                // Left third — previous page
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            if (currentPage > 0) {
-                                currentPage--
-                                showExitOverlay = false
-                                if (isLandscape) showTextPanel = false
+            // Layer 2: invisible tap zones with top dead zone
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Top 10% dead zone — lets the Android control bar pull-down through
+                Spacer(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.1f))
+
+                // Tap zones fill the remaining 90%
+                Row(modifier = Modifier.fillMaxSize()) {
+                    // Left 20% — previous page
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                if (currentPage > 0) {
+                                    currentPage--
+                                    showExitOverlay = false
+                                    if (isLandscape) showTextPanel = false
+                                }
                             }
-                        }
-                )
-                // Middle third — toggle exit (portrait) or text panel (landscape)
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            if (isLandscape) {
-                                showTextPanel = !showTextPanel
-                                showExitOverlay = false
-                            } else {
-                                showExitOverlay = !showExitOverlay
+                    )
+                    // Center 60% — toggle exit (portrait) or text panel (landscape)
+                    Box(
+                        modifier = Modifier
+                            .weight(3f)
+                            .fillMaxHeight()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                if (isLandscape) {
+                                    showTextPanel = !showTextPanel
+                                    showExitOverlay = false
+                                } else {
+                                    showExitOverlay = !showExitOverlay
+                                }
                             }
-                        }
-                )
-                // Right third — next page
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            if (currentPage < pages.size - 1) {
-                                currentPage++
-                                showExitOverlay = false
-                                if (isLandscape) showTextPanel = false
+                    )
+                    // Right 20% — next page
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                if (currentPage < pages.size - 1) {
+                                    currentPage++
+                                    showExitOverlay = false
+                                    if (isLandscape) showTextPanel = false
+                                }
                             }
-                        }
-                )
+                    )
+                }
             }
 
-            // Exit overlay — shown when center zone is tapped (portrait),
-            // or via long-press area in landscape when text panel is visible
+            // Layer 3: landscape text panel — rendered ABOVE tap zones so it's interactive
+            if (isLandscape) {
+                AnimatedVisibility(
+                    visible = showTextPanel,
+                    enter = slideInHorizontally(initialOffsetX = { it }),
+                    exit = slideOutHorizontally(targetOffsetX = { it }),
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(320.dp)
+                            .background(Color(0xFFFFFBF5).copy(alpha = 0.92f))
+                            .padding(horizontal = 28.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Spacer(modifier = Modifier.height(60.dp))
+                            Text(
+                                text = pages[currentPage].text,
+                                fontSize = 20.sp,
+                                lineHeight = 30.sp,
+                                textAlign = TextAlign.Center,
+                                color = Color(0xFF1A1A1A)
+                            )
+                            Spacer(modifier = Modifier.height(24.dp))
+                        }
+
+                        // Exit button pinned to top of text panel
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 12.dp)
+                        ) {
+                            FilledTonalButton(onClick = onBack) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ExitToApp,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.padding(horizontal = 3.dp))
+                                Text("Exit", fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Layer 4: exit overlay (portrait only) — above tap zones
             AnimatedVisibility(
                 visible = showExitOverlay,
                 enter = fadeIn(),
@@ -292,72 +347,18 @@ private fun PortraitPageContent(page: Page) {
 }
 
 /**
- * Landscape: full-screen image with a slide-in text panel from the right.
+ * Landscape: full-screen image only. Text panel is handled separately above tap zones.
  */
 @Composable
-private fun LandscapePageContent(page: Page, showTextPanel: Boolean, onBack: () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Full-screen illustration
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            PageIllustration(
-                page = page,
-                contentScale = ContentScale.Crop
-            )
-        }
-
-        // Slide-in text panel from the right
-        AnimatedVisibility(
-            visible = showTextPanel,
-            enter = slideInHorizontally(initialOffsetX = { it }),
-            exit = slideOutHorizontally(targetOffsetX = { it }),
-            modifier = Modifier.align(Alignment.CenterEnd)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(320.dp)
-                    .background(Color(0xFFFFFBF5).copy(alpha = 0.92f))
-                    .padding(horizontal = 28.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text(
-                        text = page.text,
-                        fontSize = 20.sp,
-                        lineHeight = 30.sp,
-                        textAlign = TextAlign.Center,
-                        color = Color(0xFF1A1A1A)
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                }
-
-                // Exit button pinned to top of text panel
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 12.dp)
-                ) {
-                    FilledTonalButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ExitToApp,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.padding(horizontal = 3.dp))
-                        Text("Exit", fontSize = 13.sp)
-                    }
-                }
-            }
-        }
+private fun LandscapePageContent(page: Page) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        PageIllustration(
+            page = page,
+            contentScale = ContentScale.Crop
+        )
     }
 }
 
