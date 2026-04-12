@@ -1,8 +1,7 @@
 import { StrictMode, useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
-import { Characters } from "./pages/Characters";
-import { Locations } from "./pages/Locations";
+import { Featured } from "./pages/Featured";
 import { Books } from "./pages/Books";
 import { CreateBook } from "./pages/CreateBook";
 import { Reader } from "./pages/Reader";
@@ -84,8 +83,7 @@ function App() {
           <div className="nav-links">
             <NavLink to="/">Books</NavLink>
             <NavLink to="/create">Create</NavLink>
-            <NavLink to="/characters">Characters</NavLink>
-            <NavLink to="/locations">Locations</NavLink>
+            <NavLink to="/featured">Featured</NavLink>
             <NavLink to="/settings">Settings</NavLink>
           </div>
         </nav>
@@ -93,8 +91,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Books />} />
             <Route path="/create" element={<CreateBook />} />
-            <Route path="/characters" element={<Characters />} />
-            <Route path="/locations" element={<Locations />} />
+            <Route path="/featured" element={<Featured />} />
             <Route path="/reader/:bookId" element={<Reader />} />
             <Route path="/reader/:bookId/debug" element={<BookDebug />} />
             <Route path="/reader/:bookId/images" element={<AllImages />} />
