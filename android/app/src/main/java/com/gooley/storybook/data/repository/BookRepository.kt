@@ -29,6 +29,8 @@ class BookRepository(private val context: Context) {
 
     fun getAllBooks(): Flow<List<Book>> = bookDao.getAll()
 
+    fun getBookIdsWithAudio(): Flow<List<Long>> = pageAudioDao.getBookIdsWithAudio()
+
     suspend fun getBook(id: Long): Book? = bookDao.getById(id)
 
     fun getPagesForBook(bookId: Long): Flow<List<Page>> = pageDao.getPagesForBook(bookId)

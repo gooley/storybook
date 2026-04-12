@@ -52,6 +52,7 @@ export function Books() {
               >
                 {book.hidden ? "👁" : "🙈"}
               </button>
+              {book.has_audio ? <span className="audio-badge" title="Has audio">🔊</span> : null}
               {book.cover_image_path ? (
                 <img src={getBookCoverUrl(book.id)} alt={book.title}
                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />

@@ -1,6 +1,7 @@
 package com.gooley.storybook.ui.bookshelf
 
 import android.content.res.Configuration
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -28,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +52,7 @@ fun BookshelfScreen(
 ) {
     val viewModel = remember { BookshelfViewModel(repository) }
     val books by viewModel.books.collectAsState()
+    val bookIdsWithAudio by viewModel.bookIdsWithAudio.collectAsState()
 
     Scaffold(
         floatingActionButton = {
@@ -99,7 +103,11 @@ fun BookshelfScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(books, key = { it.id }) { book ->
-                    BookCard(book = book, onClick = { onBookClick(book.id) })
+                    BookCard(
+                        book = book,
+                        hasAudio = book.id in bookIdsWithAudio,
+                        onClick = { onBookClick(book.id) }
+                    )
                 }
             }
         }
@@ -107,7 +115,7 @@ fun BookshelfScreen(
 }
 
 @Composable
-private fun BookCard(book: Book, onClick: () -> Unit) {
+private fun BookCard(book: Book, hasAudio: Boolean, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -148,6 +156,21 @@ private fun BookCard(book: Book, onClick: () -> Unit) {
                     modifier = Modifier.padding(8.dp),
                     color = MaterialTheme.colorScheme.primary
                 )
+            }
+
+            // Audio badge
+            if (hasAudio) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(4.dp)
+                        .size(24.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.Black.copy(alpha = 0.55f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("🔊", fontSize = 12.sp)
+                }
             }
         }
     }
