@@ -15,7 +15,7 @@ permissions:
 env:
   AWS_REGION: us-east-1
   ECR_URI: ${{ secrets.ECR_URI }}
-  APP_DIR: ${{ vars.APP_DIR }}
+  APP_DIR: ${{ secrets.APP_DIR }}
 
 jobs:
   deploy:
@@ -46,12 +46,12 @@ jobs:
         id: target
         run: |
           INSTANCE_ID=$(aws ec2 describe-instances \
-            --filters "Name=tag:${{ vars.INSTANCE_TAG }},Values=true" "Name=instance-state-name,Values=running" \
+            --filters "Name=tag:${{ secrets.INSTANCE_TAG }},Values=true" "Name=instance-state-name,Values=running" \
             --query 'Reservations[0].Instances[0].InstanceId' \
             --output text --region ${{ env.AWS_REGION }})
           echo "Instance ID: $INSTANCE_ID"
           if [ "$INSTANCE_ID" = "None" ] || [ -z "$INSTANCE_ID" ]; then
-            echo "::error::No running instance found with tag ${{ vars.INSTANCE_TAG }}=true"
+            echo "::error::No running instance found with matching instance tag"
             exit 1
           fi
           echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
@@ -85,7 +85,7 @@ jobs:
           DEPLOY_CMD="$DEPLOY_CMD && cd ${{ env.APP_DIR }}"
           DEPLOY_CMD="$DEPLOY_CMD && ECR_URI=${{ env.ECR_URI }} IMAGE_TAG=${{ github.sha }} docker compose pull"
           DEPLOY_CMD="$DEPLOY_CMD && ECR_URI=${{ env.ECR_URI }} IMAGE_TAG=${{ github.sha }} docker compose up -d"
-          DEPLOY_CMD="$DEPLOY_CMD && cd ${{ vars.TRAEFIK_DIR }} && docker compose restart traefik"
+          DEPLOY_CMD="$DEPLOY_CMD && cd ${{ secrets.TRAEFIK_DIR }} && docker compose restart traefik"
 
           COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
