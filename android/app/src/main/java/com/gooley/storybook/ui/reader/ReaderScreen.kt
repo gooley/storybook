@@ -1,8 +1,14 @@
 package com.gooley.storybook.ui.reader
 
 import android.app.Activity
+import android.content.res.Configuration
 import android.util.Log
 import android.view.WindowManager
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -17,10 +23,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,21 +46,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material3.Icon
-import androidx.compose.material3.FilledTonalButton
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -70,8 +74,17 @@ fun ReaderScreen(
 
     var currentPage by remember { mutableIntStateOf(0) }
     var showExitOverlay by remember { mutableStateOf(false) }
+    var showTextPanel by remember { mutableStateOf(false) }
 
-    Log.d("ReaderScreen", "Render: bookId=$bookId, pages.size=${pages.size}, pages=${pages.map { "p${it.pageNumber}(${it.imageStatus})" }}")
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    // Hide text panel when switching to portrait
+    LaunchedEffect(isLandscape) {
+        if (!isLandscape) showTextPanel = false
+    }
+
+    Log.d("ReaderScreen", "Render: bookId=$bookId, pages.size=${pages.size}, landscape=$isLandscape, pages=${pages.map { "p${it.pageNumber}(${it.imageStatus})" }}")
 
     // Auto-regenerate illustrations if any are missing
     LaunchedEffect(pages.map { it.imageStatus }) {
@@ -124,10 +137,17 @@ fun ReaderScreen(
         if (currentPage >= pages.size) currentPage = pages.size - 1
 
         Box(modifier = Modifier.fillMaxSize()) {
-            // Page content fills the screen
-            PageContent(page = pages[currentPage])
+            if (isLandscape) {
+                LandscapePageContent(
+                    page = pages[currentPage],
+                    showTextPanel = showTextPanel,
+                    onBack = onBack
+                )
+            } else {
+                PortraitPageContent(page = pages[currentPage])
+            }
 
-            // Invisible tap zones overlaid on left/right thirds
+            // Invisible tap zones
             Row(modifier = Modifier.fillMaxSize()) {
                 // Left third — previous page
                 Box(
@@ -140,10 +160,12 @@ fun ReaderScreen(
                         ) {
                             if (currentPage > 0) {
                                 currentPage--
+                                showExitOverlay = false
+                                if (isLandscape) showTextPanel = false
                             }
                         }
                 )
-                // Middle third — tap to show/hide exit button
+                // Middle third — toggle exit (portrait) or text panel (landscape)
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -152,7 +174,12 @@ fun ReaderScreen(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null
                         ) {
-                            showExitOverlay = !showExitOverlay
+                            if (isLandscape) {
+                                showTextPanel = !showTextPanel
+                                showExitOverlay = false
+                            } else {
+                                showExitOverlay = !showExitOverlay
+                            }
                         }
                 )
                 // Right third — next page
@@ -166,12 +193,15 @@ fun ReaderScreen(
                         ) {
                             if (currentPage < pages.size - 1) {
                                 currentPage++
+                                showExitOverlay = false
+                                if (isLandscape) showTextPanel = false
                             }
                         }
                 )
             }
 
-            // Exit overlay — shown when center zone is tapped
+            // Exit overlay — shown when center zone is tapped (portrait),
+            // or via long-press area in landscape when text panel is visible
             AnimatedVisibility(
                 visible = showExitOverlay,
                 enter = fadeIn(),
@@ -220,39 +250,29 @@ fun ReaderScreen(
     }
 }
 
+/**
+ * Portrait: full-bleed image edge-to-edge at top, text below.
+ */
 @Composable
-private fun PageContent(page: Page) {
+private fun PortraitPageContent(page: Page) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 8.dp),
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.Top,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Illustration
+        // Full-bleed illustration — no padding, no rounded corners
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(4f / 3f)
-                .clip(MaterialTheme.shapes.large),
+                .aspectRatio(4f / 3f),
             contentAlignment = Alignment.Center
         ) {
-            if (page.imagePath != null && page.imageStatus == Page.IMAGE_DONE) {
-                AsyncImage(
-                    model = page.imagePath,
-                    contentDescription = "Illustration for page ${page.pageNumber}",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit
-                )
-            } else if (page.imageStatus == Page.IMAGE_GENERATING) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator()
-                    Text("Drawing...", modifier = Modifier.padding(top = 8.dp))
-                }
-            } else {
-                Text("🎨", fontSize = 64.sp)
-            }
+            PageIllustration(
+                page = page,
+                contentScale = ContentScale.Crop
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -266,7 +286,99 @@ private fun PageContent(page: Page) {
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .padding(horizontal = 32.dp, vertical = 8.dp)
         )
+    }
+}
+
+/**
+ * Landscape: full-screen image with a slide-in text panel from the right.
+ */
+@Composable
+private fun LandscapePageContent(page: Page, showTextPanel: Boolean, onBack: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Full-screen illustration
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            PageIllustration(
+                page = page,
+                contentScale = ContentScale.Crop
+            )
+        }
+
+        // Slide-in text panel from the right
+        AnimatedVisibility(
+            visible = showTextPanel,
+            enter = slideInHorizontally(initialOffsetX = { it }),
+            exit = slideOutHorizontally(targetOffsetX = { it }),
+            modifier = Modifier.align(Alignment.CenterEnd)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(320.dp)
+                    .background(Color(0xFFFFFBF5).copy(alpha = 0.92f))
+                    .padding(horizontal = 28.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = page.text,
+                        fontSize = 20.sp,
+                        lineHeight = 30.sp,
+                        textAlign = TextAlign.Center,
+                        color = Color(0xFF1A1A1A)
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
+
+                // Exit button pinned to top of text panel
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 12.dp)
+                ) {
+                    FilledTonalButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ExitToApp,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.padding(horizontal = 3.dp))
+                        Text("Exit", fontSize = 13.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Shared illustration rendering — handles all image states.
+ */
+@Composable
+private fun PageIllustration(page: Page, contentScale: ContentScale) {
+    if (page.imagePath != null && page.imageStatus == Page.IMAGE_DONE) {
+        AsyncImage(
+            model = page.imagePath,
+            contentDescription = "Illustration for page ${page.pageNumber}",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = contentScale
+        )
+    } else if (page.imageStatus == Page.IMAGE_GENERATING) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator()
+            Text("Drawing...", modifier = Modifier.padding(top = 8.dp))
+        }
+    } else {
+        Text("🎨", fontSize = 64.sp)
     }
 }
