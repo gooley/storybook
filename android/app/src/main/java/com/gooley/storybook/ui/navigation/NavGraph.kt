@@ -10,6 +10,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.gooley.storybook.data.auth.ServerConfig
 import com.gooley.storybook.data.db.StorybookDatabase
 import com.gooley.storybook.data.repository.BookRepository
 import com.gooley.storybook.data.sync.SyncWorker
@@ -20,8 +21,10 @@ import com.gooley.storybook.ui.create.CreateBookScreen
 import com.gooley.storybook.ui.locations.EditLocationScreen
 import com.gooley.storybook.ui.locations.LocationsScreen
 import com.gooley.storybook.ui.reader.ReaderScreen
+import com.gooley.storybook.ui.setup.SetupScreen
 
 object Routes {
+    const val SETUP = "setup"
     const val BOOKSHELF = "bookshelf"
     const val READER = "reader/{bookId}"
     const val CREATE = "create"
@@ -38,7 +41,7 @@ object Routes {
 }
 
 @Composable
-fun NavGraph() {
+fun NavGraph(initialApiKey: String? = null) {
     val navController = rememberNavController()
     val context = LocalContext.current
     val repository = BookRepository(context)
@@ -46,7 +49,23 @@ fun NavGraph() {
     val characterDao = db.characterDao()
     val locationDao = db.locationDao()
 
-    NavHost(navController = navController, startDestination = Routes.BOOKSHELF) {
+    val startDestination = if (ServerConfig.isConfigured) Routes.BOOKSHELF else Routes.SETUP
+
+    NavHost(navController = navController, startDestination = startDestination) {
+        composable(Routes.SETUP) {
+            SetupScreen(
+                onSetupComplete = {
+                    // Start sync now that we're configured
+                    SyncWorker.schedulePeriodicSync(context)
+                    SyncWorker.syncNow(context)
+                    navController.navigate(Routes.BOOKSHELF) {
+                        popUpTo(Routes.SETUP) { inclusive = true }
+                    }
+                },
+                initialApiKey = initialApiKey
+            )
+        }
+
         composable(Routes.BOOKSHELF) { backStackEntry ->
             // Sync every time the bookshelf becomes active (initial load + returning from other screens)
             DisposableEffect(backStackEntry) {

@@ -116,9 +116,7 @@ jobs:
           cache: gradle
 
       - name: Create local.properties
-        run: |
-          echo "sdk.dir=$ANDROID_HOME" > local.properties
-          echo "SYNC_API_URL=https://ci-placeholder.example.com" >> local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
 
       - name: Build debug APK
         run: ./gradlew assembleDebug --no-daemon

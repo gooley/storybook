@@ -6,14 +6,6 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
-import java.util.Properties
-
-val localProperties = Properties()
-val localPropsFile = rootProject.file("local.properties")
-if (localPropsFile.exists()) {
-    localPropsFile.inputStream().use { localProperties.load(it) }
-}
-
 android {
     namespace = "com.gooley.storybook"
     compileSdk = 35
@@ -24,17 +16,6 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
-
-        buildConfigField(
-            "String",
-            "SYNC_API_URL",
-            "\"${localProperties.getProperty("SYNC_API_URL", "")}\""
-        )
-        buildConfigField(
-            "String",
-            "SYNC_API_KEY",
-            "\"${localProperties.getProperty("SYNC_API_KEY", "")}\""
-        )
     }
 
     buildTypes {
@@ -93,6 +74,9 @@ dependencies {
 
     // WorkManager for background sync
     implementation("androidx.work:work-runtime-ktx:2.10.0")
+
+    // Security - encrypted shared preferences
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     // Image loading
     implementation("io.coil-kt.coil3:coil-compose:3.0.4")

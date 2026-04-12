@@ -1,7 +1,7 @@
 package com.gooley.storybook.data.api
 
 import android.util.Log
-import com.gooley.storybook.BuildConfig
+import com.gooley.storybook.data.auth.ServerConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -12,8 +12,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
 class GenerationClient {
-    private val baseUrl = BuildConfig.SYNC_API_URL.trimEnd('/')
-    private val apiKey = BuildConfig.SYNC_API_KEY
+    private val baseUrl: String get() = ServerConfig.serverUrl
+    private val authToken: String get() = ServerConfig.authToken
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -21,8 +21,9 @@ class GenerationClient {
         .writeTimeout(30, TimeUnit.SECONDS)
         .addInterceptor { chain ->
             val request = chain.request().newBuilder()
-            if (apiKey.isNotEmpty()) {
-                request.header("Authorization", "Bearer $apiKey")
+            val token = authToken
+            if (token.isNotEmpty()) {
+                request.header("Authorization", "Bearer $token")
             }
             chain.proceed(request.build())
         }
