@@ -1,8 +1,12 @@
 package com.gooley.storybook.ui.reader
 
 import android.app.Activity
+import android.content.res.Configuration
 import android.util.Log
 import android.view.WindowManager
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -17,10 +21,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,21 +43,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material3.Icon
-import androidx.compose.material3.FilledTonalButton
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -70,8 +72,12 @@ fun ReaderScreen(
 
     var currentPage by remember { mutableIntStateOf(0) }
     var showExitOverlay by remember { mutableStateOf(false) }
+    var showTextBar by remember { mutableStateOf(true) }
 
-    Log.d("ReaderScreen", "Render: bookId=$bookId, pages.size=${pages.size}, pages=${pages.map { "p${it.pageNumber}(${it.imageStatus})" }}")
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    Log.d("ReaderScreen", "Render: bookId=$bookId, pages.size=${pages.size}, landscape=$isLandscape, pages=${pages.map { "p${it.pageNumber}(${it.imageStatus})" }}")
 
     // Auto-regenerate illustrations if any are missing
     LaunchedEffect(pages.map { it.imageStatus }) {
@@ -124,54 +130,96 @@ fun ReaderScreen(
         if (currentPage >= pages.size) currentPage = pages.size - 1
 
         Box(modifier = Modifier.fillMaxSize()) {
-            // Page content fills the screen
-            PageContent(page = pages[currentPage])
-
-            // Invisible tap zones overlaid on left/right thirds
-            Row(modifier = Modifier.fillMaxSize()) {
-                // Left third — previous page
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            if (currentPage > 0) {
-                                currentPage--
-                            }
-                        }
-                )
-                // Middle third — tap to show/hide exit button
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            showExitOverlay = !showExitOverlay
-                        }
-                )
-                // Right third — next page
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            if (currentPage < pages.size - 1) {
-                                currentPage++
-                            }
-                        }
-                )
+            // Layer 1: page content (image + text in portrait, image only in landscape)
+            if (isLandscape) {
+                LandscapePageContent(page = pages[currentPage])
+            } else {
+                PortraitPageContent(page = pages[currentPage])
             }
 
-            // Exit overlay — shown when center zone is tapped
+            // Layer 2: invisible tap zones with top dead zone
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Top 10% dead zone — lets the Android control bar pull-down through
+                Spacer(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.1f))
+
+                // Tap zones fill the remaining 90%
+                Row(modifier = Modifier.fillMaxSize()) {
+                    // Left 20% — previous page
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                if (currentPage > 0) {
+                                    currentPage--
+                                    showExitOverlay = false
+                                    showTextBar = true
+                                }
+                            }
+                    )
+                    // Center 60% — toggle exit overlay (and hide text in landscape)
+                    Box(
+                        modifier = Modifier
+                            .weight(3f)
+                            .fillMaxHeight()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                showExitOverlay = !showExitOverlay
+                                if (isLandscape) showTextBar = !showTextBar
+                            }
+                    )
+                    // Right 20% — next page
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                if (currentPage < pages.size - 1) {
+                                    currentPage++
+                                    showExitOverlay = false
+                                    showTextBar = true
+                                }
+                            }
+                    )
+                }
+            }
+
+            // Layer 3: landscape bottom text bar — visible by default, toggles with center tap
+            if (isLandscape) {
+                AnimatedVisibility(
+                    visible = showTextBar,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.Black.copy(alpha = 0.65f))
+                            .padding(horizontal = 32.dp, vertical = 16.dp)
+                    ) {
+                        Text(
+                            text = pages[currentPage].text,
+                            fontSize = 18.sp,
+                            lineHeight = 26.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            color = Color.White,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+
+            // Layer 4: exit overlay — above tap zones, works in both orientations
             AnimatedVisibility(
                 visible = showExitOverlay,
                 enter = fadeIn(),
@@ -199,11 +247,15 @@ fun ReaderScreen(
                 }
             }
 
-            // Page indicator pill at bottom center
+            // Page indicator — top-right in landscape, bottom-center in portrait
             Box(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 16.dp)
+                    .align(if (isLandscape) Alignment.TopEnd else Alignment.BottomCenter)
+                    .padding(
+                        top = if (isLandscape) 16.dp else 0.dp,
+                        end = if (isLandscape) 16.dp else 0.dp,
+                        bottom = if (isLandscape) 0.dp else 16.dp
+                    )
                     .background(
                         Color.Black.copy(alpha = 0.4f),
                         RoundedCornerShape(12.dp)
@@ -220,39 +272,29 @@ fun ReaderScreen(
     }
 }
 
+/**
+ * Portrait: full-bleed image edge-to-edge at top, text below.
+ */
 @Composable
-private fun PageContent(page: Page) {
+private fun PortraitPageContent(page: Page) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 8.dp),
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.Top,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Illustration
+        // Full-bleed illustration — no padding, no rounded corners
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(4f / 3f)
-                .clip(MaterialTheme.shapes.large),
+                .aspectRatio(4f / 3f),
             contentAlignment = Alignment.Center
         ) {
-            if (page.imagePath != null && page.imageStatus == Page.IMAGE_DONE) {
-                AsyncImage(
-                    model = page.imagePath,
-                    contentDescription = "Illustration for page ${page.pageNumber}",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit
-                )
-            } else if (page.imageStatus == Page.IMAGE_GENERATING) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator()
-                    Text("Drawing...", modifier = Modifier.padding(top = 8.dp))
-                }
-            } else {
-                Text("🎨", fontSize = 64.sp)
-            }
+            PageIllustration(
+                page = page,
+                contentScale = ContentScale.Crop
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -266,7 +308,45 @@ private fun PageContent(page: Page) {
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .padding(horizontal = 32.dp, vertical = 8.dp)
         )
+    }
+}
+
+/**
+ * Landscape: full-screen image only. Text panel is handled separately above tap zones.
+ */
+@Composable
+private fun LandscapePageContent(page: Page) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        PageIllustration(
+            page = page,
+            contentScale = ContentScale.Crop
+        )
+    }
+}
+
+/**
+ * Shared illustration rendering — handles all image states.
+ */
+@Composable
+private fun PageIllustration(page: Page, contentScale: ContentScale) {
+    if (page.imagePath != null && page.imageStatus == Page.IMAGE_DONE) {
+        AsyncImage(
+            model = page.imagePath,
+            contentDescription = "Illustration for page ${page.pageNumber}",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = contentScale
+        )
+    } else if (page.imageStatus == Page.IMAGE_GENERATING) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator()
+            Text("Drawing...", modifier = Modifier.padding(top = 8.dp))
+        }
+    } else {
+        Text("🎨", fontSize = 64.sp)
     }
 }
