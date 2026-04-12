@@ -1,9 +1,7 @@
 services:
   app:
-    image: ghcr.io/gooley/storybook:latest
+    image: ${ECR_URI}:storybook-${IMAGE_TAG:-latest}
     restart: unless-stopped
-    ports:
-    - "3000:3000"
     env_file:
     - .env
     environment:
@@ -11,5 +9,27 @@ services:
     - DATA_DIR=/app/data
     volumes:
     - storybook-data:/app/data
+    networks:
+    - gool3yhost
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.storybook.rule=Host(`storybook.gool3y.com`)
+    - traefik.http.routers.storybook.service=storybook
+    - traefik.http.services.storybook.loadbalancer.server.port=3000
+    - traefik.http.routers.storybook.middlewares=storybook-auth-group,storybook-fwdauth
+    - traefik.http.middlewares.storybook-auth-group.headers.customrequestheaders.X-Auth-Required-Group=owner,family
+    - traefik.http.middlewares.storybook-auth-group.headers.customrequestheaders.X-Auth-Public-Paths=/manifest.json,/sw.js,/icon.svg,/icons/*,/apple-touch-icon.png,/favicon-*,/api/healthz
+    - traefik.http.middlewares.storybook-fwdauth.forwardauth.address=http://auth:8000/verify
+    - traefik.http.middlewares.storybook-fwdauth.forwardauth.authResponseHeaders=X-Auth-Email,X-Auth-Name,X-Auth-Groups
+    - traefik.http.middlewares.storybook-fwdauth.forwardauth.trustForwardHeader=true
 volumes:
   storybook-data: null
+networks:
+  gool3yhost:
+    external: true
