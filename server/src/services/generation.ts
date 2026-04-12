@@ -539,11 +539,37 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
         const outputPath = path.join(audioDir, `${entry.id}.mp3`);
         const isAmbient = entry.audioType === "ambient";
 
+        const audioStart = Date.now();
         const result = await generateSoundEffect(entry.description, outputPath, {
           looping: isAmbient,
           durationSeconds: isAmbient ? 22 : entry.durationHint,
           promptInfluence: isAmbient ? 0.5 : 0.7,
         });
+        const audioDuration = Date.now() - audioStart;
+
+        saveGenerationLog(
+          {
+            model: "elevenlabs-sound-generation",
+            prompt: entry.description,
+            systemPrompt: null,
+            characterRefsJson: null,
+            numImagesAttached: 0,
+            hadReferenceImage: false,
+            responseText: result.success
+              ? `Generated ${entry.audioType} audio (${result.durationSeconds?.toFixed(1)}s)`
+              : null,
+            responseModel: "elevenlabs-sound-generation",
+            success: result.success,
+            errorMessage: result.error ?? null,
+            durationMs: audioDuration,
+          },
+          {
+            jobId: job.id,
+            bookId,
+            pageId: entry.pageId,
+            stepType: "audio",
+          }
+        );
 
         if (result.success) {
           db.prepare(
@@ -1003,11 +1029,37 @@ async function executeGenerateAudio(job: GenerationJob): Promise<void> {
       const outputPath = path.join(audioDir, `${entry.id}.mp3`);
       const isAmbient = entry.audioType === "ambient";
 
+      const audioStart = Date.now();
       const result = await generateSoundEffect(entry.description, outputPath, {
         looping: isAmbient,
         durationSeconds: isAmbient ? 22 : entry.durationHint,
         promptInfluence: isAmbient ? 0.5 : 0.7,
       });
+      const audioDuration = Date.now() - audioStart;
+
+      saveGenerationLog(
+        {
+          model: "elevenlabs-sound-generation",
+          prompt: entry.description,
+          systemPrompt: null,
+          characterRefsJson: null,
+          numImagesAttached: 0,
+          hadReferenceImage: false,
+          responseText: result.success
+            ? `Generated ${entry.audioType} audio (${result.durationSeconds?.toFixed(1)}s)`
+            : null,
+          responseModel: "elevenlabs-sound-generation",
+          success: result.success,
+          errorMessage: result.error ?? null,
+          durationMs: audioDuration,
+        },
+        {
+          jobId: job.id,
+          bookId,
+          pageId: entry.pageId,
+          stepType: "audio",
+        }
+      );
 
       if (result.success) {
         db.prepare(
