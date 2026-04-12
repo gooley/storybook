@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -193,13 +194,14 @@ fun ReaderScreen(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .background(Color.Black.copy(alpha = 0.55f))
+                        .background(Color.Black.copy(alpha = 0.65f))
                         .padding(horizontal = 32.dp, vertical = 16.dp)
                 ) {
                     Text(
                         text = pages[currentPage].text,
                         fontSize = 18.sp,
                         lineHeight = 26.sp,
+                        fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
                         color = Color.White,
                         modifier = Modifier.fillMaxWidth()
