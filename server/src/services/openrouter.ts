@@ -192,9 +192,12 @@ async function makeRequest(request: ChatRequest): Promise<any> {
   const body: Record<string, any> = {
     model: request.model,
     messages: request.messages,
-    temperature: request.temperature ?? 0.8,
     max_tokens: request.max_tokens ?? 4096,
   };
+  // Some models (e.g. openai/gpt-5-image-mini) don't support temperature
+  if (request.temperature != null) {
+    body.temperature = request.temperature;
+  }
   if (request.modalities) {
     body.modalities = request.modalities;
   }
@@ -355,6 +358,7 @@ Write visual directions for each of the ${story.pages.length} pages to ensure il
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
+      temperature: 0.8,
       trace,
     });
 
