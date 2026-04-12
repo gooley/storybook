@@ -7,6 +7,7 @@ import {
   getBookPages,
   generateBookAudio,
   pollGenerationStatus,
+  getAudioFileUrl,
   type Book,
   type GenerationLog,
 } from "../api/client";
@@ -34,12 +35,19 @@ function shortModel(model: string): string {
   return model.includes("/") ? model.split("/").pop()! : model;
 }
 
+function extractAudioId(responseText: string | null): string | null {
+  if (!responseText) return null;
+  const match = responseText.match(/audio_id:(\S+)/);
+  return match ? match[1] : null;
+}
+
 function LogEntry({ log }: { log: GenerationLog }) {
   const [expanded, setExpanded] = useState(false);
   const isSuccess = log.success === 1;
   const characterRefs = log.character_refs_json
     ? JSON.parse(log.character_refs_json)
     : null;
+  const audioId = log.step_type === "audio" ? extractAudioId(log.response_text) : null;
 
   return (
     <div
@@ -64,6 +72,15 @@ function LogEntry({ log }: { log: GenerationLog }) {
           {log.had_reference_image === 1 && " 🖼"}
         </span>
         <span className="debug-log-time">{formatTime(log.created_at)}</span>
+        {audioId && (
+          <audio
+            controls
+            preload="none"
+            src={getAudioFileUrl(audioId)}
+            onClick={(e) => e.stopPropagation()}
+            style={{ height: 28, marginLeft: 8, verticalAlign: "middle" }}
+          />
+        )}
         <span className="debug-log-expand">{expanded ? "▾" : "▸"}</span>
       </div>
 

@@ -100,8 +100,8 @@ fun ReaderScreen(
         }
     }
 
-    // Play ambient on page change
-    LaunchedEffect(currentPage, soundEnabled) {
+    // Play ambient on page change or when audio data loads
+    LaunchedEffect(currentPage, soundEnabled, pageAudioMap) {
         if (pages.isNotEmpty() && currentPage < pages.size) {
             viewModel.onPageChange(pages[currentPage])
         }

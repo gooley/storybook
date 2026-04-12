@@ -35,11 +35,17 @@ class AudioManager {
     fun playSfx(audioList: List<PageAudio>) {
         if (audioList.isEmpty()) return
         stopSfx()
+        // Duck ambient volume while SFX plays
+        ambientPlayer?.setVolume(0.2f, 0.2f)
         playSfxSequence(audioList, 0)
     }
 
     private fun playSfxSequence(audioList: List<PageAudio>, index: Int) {
-        if (index >= audioList.size) return
+        if (index >= audioList.size) {
+            // Restore ambient volume when all SFX done
+            ambientPlayer?.setVolume(0.5f, 0.5f)
+            return
+        }
         val path = audioList[index].audioPath ?: return
 
         try {
@@ -55,6 +61,7 @@ class AudioManager {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to play SFX: ${e.message}")
+            ambientPlayer?.setVolume(0.5f, 0.5f)
         }
     }
 
