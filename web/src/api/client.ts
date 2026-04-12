@@ -171,6 +171,11 @@ export const pollGenerationStatus = (jobId: string) =>
 export const getActiveGenerationJobs = () =>
   request<GenerationStatus[]>("/generate/active");
 
+export const generateBookAudio = (bookId: string) =>
+  request<{ jobId: string; bookId: string }>(`/generate/${bookId}/generate-audio`, {
+    method: "POST",
+  });
+
 // Models API
 export interface ModelOption {
   id: string;

@@ -94,6 +94,23 @@ export function validateSessionToken(token: string): boolean {
   );
 }
 
+// --- ElevenLabs API Key ---
+
+export function getElevenLabsKey(): string {
+  if (process.env.ELEVENLABS_API_KEY) {
+    return process.env.ELEVENLABS_API_KEY;
+  }
+  return getSetting("elevenlabs_api_key") || "";
+}
+
+export function setElevenLabsKey(key: string): void {
+  setSetting("elevenlabs_api_key", key);
+}
+
+export function hasElevenLabsKey(): boolean {
+  return getElevenLabsKey().length > 0;
+}
+
 // --- Setup Status ---
 
 export interface SetupStatus {

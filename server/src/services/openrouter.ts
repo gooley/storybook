@@ -57,7 +57,7 @@ interface ChatMessage {
 /** Optional metadata sent to OpenRouter for broadcast/observability tracing */
 export interface TraceMetadata {
   bookId?: string;
-  stepType?: "story" | "continuity" | "illustration" | "cover";
+  stepType?: "story" | "continuity" | "illustration" | "cover" | "sound_design" | "audio";
   pageNumber?: number;
   totalPages?: number;
 }

@@ -1,15 +1,13 @@
 import fs from "fs";
 import path from "path";
+import {
+  getElevenLabsKey,
+  hasElevenLabsKey,
+} from "./config";
 
 const ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/sound-generation";
 
-export function getElevenLabsKey(): string {
-  return process.env.ELEVENLABS_API_KEY || "";
-}
-
-export function hasElevenLabsKey(): boolean {
-  return getElevenLabsKey().length > 0;
-}
+export { getElevenLabsKey, hasElevenLabsKey };
 
 export interface SoundEffectOptions {
   looping?: boolean;
