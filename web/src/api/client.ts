@@ -32,6 +32,7 @@ export interface Book {
   cover_image_path: string | null;
   status: string;
   hidden: number;
+  has_audio: number;
   created_at: number;
   updated_at: number;
   page_count?: number;

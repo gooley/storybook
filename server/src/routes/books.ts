@@ -37,7 +37,13 @@ const illustrationUpload = multer({
 router.get("/", (_req: Request, res: Response) => {
   const books = db
     .prepare(
-      "SELECT * FROM books WHERE deleted_at IS NULL ORDER BY created_at DESC"
+      `SELECT b.*,
+        EXISTS(
+          SELECT 1 FROM page_audio pa
+          JOIN pages p ON pa.page_id = p.id
+          WHERE p.book_id = b.id AND pa.status = 'done'
+        ) as has_audio
+       FROM books b WHERE b.deleted_at IS NULL ORDER BY b.created_at DESC`
     )
     .all();
   res.json(books);
