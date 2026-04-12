@@ -13,7 +13,6 @@ import {
   getBookCoverUrl,
   type Book,
   type GenerationLog,
-  type Page,
 } from "../api/client";
 
 const STEP_LABELS: Record<string, string> = {
@@ -45,7 +44,7 @@ function extractAudioId(responseText: string | null): string | null {
   return match ? match[1] : null;
 }
 
-function LogEntry({ log, pages }: { log: GenerationLog; pages: Page[] }) {
+function LogEntry({ log }: { log: GenerationLog }) {
   const [expanded, setExpanded] = useState(false);
   const isSuccess = log.success === 1;
   const characterRefs = log.character_refs_json
@@ -235,7 +234,6 @@ export function BookDebug() {
   const navigate = useNavigate();
   const [book, setBook] = useState<Book | null>(null);
   const [logs, setLogs] = useState<GenerationLog[]>([]);
-  const [pages, setPages] = useState<Page[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("all");
   const [hasAudio, setHasAudio] = useState(false);
@@ -245,17 +243,16 @@ export function BookDebug() {
   const load = useCallback(async () => {
     if (!bookId) return;
     try {
-      const [b, l, p] = await Promise.all([
+      const [b, l, pages] = await Promise.all([
         getBook(bookId),
         getBookGenerationLogs(bookId),
         getBookPages(bookId),
       ]);
       setBook(b);
       setLogs(l);
-      setPages(p);
       // Check if any page has audio
-      if (p.length > 0) {
-        const firstPageAudio = await getPageAudio(p[0].id).catch(() => []);
+      if (pages.length > 0) {
+        const firstPageAudio = await getPageAudio(pages[0].id).catch(() => []);
         setHasAudio(firstPageAudio.length > 0);
       }
     } finally {
@@ -375,7 +372,7 @@ export function BookDebug() {
       ) : (
         <div className="debug-log-list">
           {filteredLogs.map((log) => (
-            <LogEntry key={log.id} log={log} pages={pages} />
+            <LogEntry key={log.id} log={log} />
           ))}
         </div>
       )}
