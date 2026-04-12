@@ -491,10 +491,11 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
         });
       }
 
-      // SFX tracks
+      // SFX tracks (limit to 1 per page)
       if (design.sfx) {
-        for (let s = 0; s < design.sfx.length; s++) {
-          const sfx = design.sfx[s];
+        const sfxList = design.sfx.slice(0, 1);
+        for (let s = 0; s < sfxList.length; s++) {
+          const sfx = sfxList[s];
           const audioId = nanoid();
           audioEntries.push({
             id: audioId,
@@ -986,8 +987,9 @@ async function executeGenerateAudio(job: GenerationJob): Promise<void> {
     }
 
     if (design.sfx) {
-      for (let s = 0; s < design.sfx.length; s++) {
-        const sfx = design.sfx[s];
+      const sfxList = design.sfx.slice(0, 1);
+      for (let s = 0; s < sfxList.length; s++) {
+        const sfx = sfxList[s];
         audioEntries.push({
           id: nanoid(),
           pageId: pages[i].id,

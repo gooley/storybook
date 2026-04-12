@@ -34,42 +34,7 @@ const elementUpload = multer({
   },
 });
 
-// Rate limit config
-const MAX_ACTIVE_JOBS = 1;
-const MAX_JOBS_PER_HOUR = 5;
-const MAX_PENDING_JOBS = 3;
-
-function checkRateLimits(): string | null {
-  const activeCount = db
-    .prepare(
-      "SELECT COUNT(*) as cnt FROM generation_jobs WHERE status NOT IN ('done', 'error', 'cancelled')"
-    )
-    .get() as { cnt: number };
-  if (activeCount.cnt >= MAX_PENDING_JOBS) {
-    return `Too many queued jobs (${activeCount.cnt}). Please wait for current jobs to complete.`;
-  }
-
-  const activeRunning = db
-    .prepare(
-      "SELECT COUNT(*) as cnt FROM generation_jobs WHERE status NOT IN ('done', 'error', 'cancelled', 'pending')"
-    )
-    .get() as { cnt: number };
-  if (activeRunning.cnt >= MAX_ACTIVE_JOBS) {
-    // Allow queueing but inform
-  }
-
-  const hourAgo = Date.now() - 60 * 60 * 1000;
-  const recentCount = db
-    .prepare(
-      "SELECT COUNT(*) as cnt FROM generation_jobs WHERE created_at > ?"
-    )
-    .get(hourAgo) as { cnt: number };
-  if (recentCount.cnt >= MAX_JOBS_PER_HOUR) {
-    return `Rate limit exceeded (${MAX_JOBS_PER_HOUR} jobs per hour). Please try again later.`;
-  }
-
-  return null;
-}
+// No self-imposed rate limits — upstream APIs handle their own limits
 
 // POST /api/generate/element-photos — Upload element reference photos
 router.post(
@@ -190,12 +155,6 @@ router.post("/book", (req: Request, res: Response) => {
   }
 
   // Rate limit check
-  const rateLimitError = checkRateLimits();
-  if (rateLimitError) {
-    res.status(429).json({ error: rateLimitError });
-    return;
-  }
-
   // Create job
   const jobId = nanoid();
   const now = Date.now();
@@ -279,12 +238,6 @@ router.post("/:bookId/regenerate-illustrations", (req: Request, res: Response) =
     return;
   }
 
-  const rateLimitError = checkRateLimits();
-  if (rateLimitError) {
-    res.status(429).json({ error: rateLimitError });
-    return;
-  }
-
   const jobId = nanoid();
   const now = Date.now();
   db.prepare(
@@ -313,12 +266,6 @@ router.post("/:bookId/generate-audio", (req: Request, res: Response) => {
     return;
   }
 
-  const rateLimitError = checkRateLimits();
-  if (rateLimitError) {
-    res.status(429).json({ error: rateLimitError });
-    return;
-  }
-
   const jobId = nanoid();
   const now = Date.now();
   db.prepare(
@@ -337,12 +284,6 @@ router.post("/:bookId/generate-audio", (req: Request, res: Response) => {
 
 // POST /api/generate/regenerate-covers — Batch regenerate all covers
 router.post("/regenerate-covers", (_req: Request, res: Response) => {
-  const rateLimitError = checkRateLimits();
-  if (rateLimitError) {
-    res.status(429).json({ error: rateLimitError });
-    return;
-  }
-
   const jobId = nanoid();
   const now = Date.now();
   db.prepare(
