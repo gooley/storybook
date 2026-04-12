@@ -556,7 +556,7 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
             numImagesAttached: 0,
             hadReferenceImage: false,
             responseText: result.success
-              ? `Generated ${entry.audioType} audio (${result.durationSeconds?.toFixed(1)}s)`
+              ? `Generated ${entry.audioType} audio (${result.durationSeconds?.toFixed(1)}s)\naudio_id:${entry.id}`
               : null,
             responseModel: "elevenlabs-sound-generation",
             success: result.success,
@@ -1046,7 +1046,7 @@ async function executeGenerateAudio(job: GenerationJob): Promise<void> {
           numImagesAttached: 0,
           hadReferenceImage: false,
           responseText: result.success
-            ? `Generated ${entry.audioType} audio (${result.durationSeconds?.toFixed(1)}s)`
+            ? `Generated ${entry.audioType} audio (${result.durationSeconds?.toFixed(1)}s)\naudio_id:${entry.id}`
             : null,
           responseModel: "elevenlabs-sound-generation",
           success: result.success,

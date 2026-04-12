@@ -26,7 +26,7 @@ class ReaderViewModel(
     private val _progress = MutableStateFlow("")
     val progress: StateFlow<String> = _progress.asStateFlow()
 
-    private val _soundEnabled = MutableStateFlow(false)
+    private val _soundEnabled = MutableStateFlow(true)
     val soundEnabled: StateFlow<Boolean> = _soundEnabled.asStateFlow()
 
     private val _textVisible = MutableStateFlow(true)

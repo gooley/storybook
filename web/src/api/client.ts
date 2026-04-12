@@ -214,7 +214,7 @@ export interface GenerationLog {
   job_id: string | null;
   book_id: string | null;
   page_id: string | null;
-  step_type: "story" | "illustration" | "cover";
+  step_type: "story" | "illustration" | "cover" | "sound_design" | "audio";
   model: string;
   prompt: string;
   system_prompt: string | null;
