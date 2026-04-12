@@ -285,9 +285,11 @@ class SyncManager(
 
         // Upsert page audio
         for (spa in response.pageAudio) {
+            if (spa.status != "done" || spa.audioPath == null) continue
             val pageLocal = pageDao.getByUuid(spa.pageId) ?: continue
             val existing = pageAudioDao.getByUuid(spa.id)
-            if (existing == null && spa.status == "done" && spa.audioPath != null) {
+
+            if (existing == null) {
                 val localId = pageAudioDao.upsert(PageAudio(
                     uuid = spa.id,
                     pageLocalId = pageLocal.id,
@@ -301,6 +303,13 @@ class SyncManager(
                     updatedAt = spa.updatedAt
                 ))
                 downloadAudioFile(spa.id, localId)
+            } else {
+                // Repair: re-download if local file is missing
+                val localFile = existing.audioPath?.let { File(it) }
+                if (localFile == null || !localFile.exists()) {
+                    Log.d(TAG, "Repairing missing audio for ${spa.id}")
+                    downloadAudioFile(spa.id, existing.id)
+                }
             }
         }
 
