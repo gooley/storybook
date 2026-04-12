@@ -173,6 +173,18 @@ export function migrate(): void {
     CREATE INDEX IF NOT EXISTS idx_page_audio_updated ON page_audio(updated_at);
   `);
 
+  // Migration: add input/output image paths to generation_logs
+  try {
+    db.exec("ALTER TABLE generation_logs ADD COLUMN input_image_paths_json TEXT");
+  } catch (_) {
+    // Column already exists
+  }
+  try {
+    db.exec("ALTER TABLE generation_logs ADD COLUMN output_image_path TEXT");
+  } catch (_) {
+    // Column already exists
+  }
+
   // Startup recovery: mark orphaned in-progress jobs as error
   db.prepare(`
     UPDATE generation_jobs

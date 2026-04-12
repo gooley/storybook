@@ -8,6 +8,9 @@ import {
   generateBookAudio,
   pollGenerationStatus,
   getAudioFileUrl,
+  getUploadUrl,
+  getPageImageUrl,
+  getBookCoverUrl,
   type Book,
   type GenerationLog,
 } from "../api/client";
@@ -48,6 +51,26 @@ function LogEntry({ log }: { log: GenerationLog }) {
     ? JSON.parse(log.character_refs_json)
     : null;
   const audioId = log.step_type === "audio" ? extractAudioId(log.response_text) : null;
+
+  // Parse input image paths
+  const inputImagePaths: string[] = log.input_image_paths_json
+    ? JSON.parse(log.input_image_paths_json)
+    : [];
+
+  // Determine output image URL
+  let outputImageUrl: string | null = null;
+  if (log.output_image_path) {
+    outputImageUrl = getUploadUrl(log.output_image_path);
+  } else if (isSuccess) {
+    // Fallback for older logs without stored paths
+    if (log.step_type === "illustration" && log.page_id) {
+      outputImageUrl = getPageImageUrl(log.page_id);
+    } else if (log.step_type === "cover" && log.book_id) {
+      outputImageUrl = getBookCoverUrl(log.book_id);
+    }
+  }
+
+  const hasImages = inputImagePaths.length > 0 || outputImageUrl;
 
   return (
     <div
@@ -92,6 +115,44 @@ function LogEntry({ log }: { log: GenerationLog }) {
 
       {expanded && (
         <div className="debug-log-details" onClick={(e) => e.stopPropagation()}>
+          {hasImages && (
+            <div className="debug-log-section">
+              {inputImagePaths.length > 0 && (
+                <>
+                  <h4>Input Images ({inputImagePaths.length})</h4>
+                  <div className="debug-image-grid">
+                    {inputImagePaths.map((imgPath, i) => (
+                      <div key={i} className="debug-image-item">
+                        <img
+                          src={getUploadUrl(imgPath)}
+                          alt={`Input ${i + 1}`}
+                          loading="lazy"
+                        />
+                        <span className="debug-image-label" title={imgPath}>
+                          {imgPath.split("/").pop()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+              {outputImageUrl && (
+                <>
+                  <h4>Output Image</h4>
+                  <div className="debug-image-grid debug-image-output">
+                    <div className="debug-image-item">
+                      <img
+                        src={outputImageUrl}
+                        alt="Output"
+                        loading="lazy"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           <div className="debug-log-section">
             <h4>Prompt</h4>
             <pre className="debug-log-pre">{log.prompt}</pre>

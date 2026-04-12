@@ -395,4 +395,21 @@ router.get("/audio/:audioId", (req: Request, res: Response) => {
   res.sendFile(filePath);
 });
 
+// Serve an upload file by relative path (for debug page image display)
+router.get("/uploads/{*filepath}", (req: Request, res: Response) => {
+  const relativePath = (req.params as any).filepath;
+  if (!relativePath || relativePath.includes("..")) {
+    res.status(400).json({ error: "Invalid path" });
+    return;
+  }
+
+  const filePath = path.join(getUploadsDir(), relativePath);
+  if (!fs.existsSync(filePath)) {
+    res.status(404).json({ error: "File not found" });
+    return;
+  }
+
+  res.sendFile(filePath);
+});
+
 export default router;
