@@ -351,7 +351,7 @@ For EACH page, provide TWO things:
 
 ## SOUND DESIGN
 - **Ambient**: A single background soundscape description that loops during the page. Describe the environmental atmosphere — weather, nature sounds, room tone, crowd noise, etc. Be specific and evocative. Use audio terminology: ambience, drone, texture, atmosphere.
-- **SFX**: 1-3 short event sound effects for key story moments on this page. These are one-shot sounds triggered by the reader. Use descriptive audio language: impact, whoosh, one-shot, creak, splash, etc. Include a duration hint (2-8 seconds).
+- **SFX**: One short event sound effect for the key story moment on this page. This is a one-shot sound triggered by the reader. Use descriptive audio language: impact, whoosh, one-shot, creak, splash, etc. Include a duration hint (2-8 seconds). If a page has no distinct sound event, use an empty sfx array.
 
 CRITICAL VISUAL RULES:
 - If a character puts on a costume/outfit on page 1, they must STILL be wearing it on subsequent pages unless the story explicitly says they changed.
@@ -360,7 +360,7 @@ CRITICAL VISUAL RULES:
 
 CRITICAL SOUND RULES:
 - Ambient should be atmospheric and loopable (no sudden starts/stops).
-- SFX should match specific actions or events described in the page text.
+- SFX should match the single most important action or event described in the page text.
 - Write prompts optimized for AI sound generation — be descriptive but concise.
 - If a page has no distinct sound events, use an empty sfx array.
 
@@ -376,8 +376,7 @@ Example:
       "visualDirection": "Luna stands at the forest edge wearing her red cape...",
       "ambient": "Gentle forest ambience with birdsong, soft wind rustling through oak leaves, and distant stream babbling",
       "sfx": [
-        { "description": "Wooden gate creaking open slowly with rusty hinges", "durationHint": 3 },
-        { "description": "Small bird chirping a short melodic phrase nearby", "durationHint": 2 }
+        { "description": "Wooden gate creaking open slowly with rusty hinges", "durationHint": 3 }
       ]
     }
   ]
