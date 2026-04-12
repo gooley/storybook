@@ -83,15 +83,16 @@ class ReaderViewModel(
     }
 
     fun onCenterTap(page: Page) {
-        if (!_soundEnabled.value) return
-        val audioEntries = _pageAudioMap.value[page.id] ?: emptyList()
-        val sfxEntries = audioEntries.filter { it.audioType == "sfx" }
+        // Always toggle text visibility
+        _textVisible.value = !_textVisible.value
 
-        if (_textVisible.value && sfxEntries.isNotEmpty()) {
-            _textVisible.value = false
-            audioManager.playSfx(sfxEntries)
-        } else {
-            _textVisible.value = true
+        // Play SFX when hiding text (if sound enabled and SFX available)
+        if (!_textVisible.value && _soundEnabled.value) {
+            val audioEntries = _pageAudioMap.value[page.id] ?: emptyList()
+            val sfxEntries = audioEntries.filter { it.audioType == "sfx" }
+            if (sfxEntries.isNotEmpty()) {
+                audioManager.playSfx(sfxEntries)
+            }
         }
     }
 

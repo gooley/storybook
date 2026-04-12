@@ -12,21 +12,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material3.CircularProgressIndicator
@@ -157,7 +152,7 @@ fun ReaderScreen(
             if (isLandscape) {
                 LandscapePageContent(page = pages[currentPage])
             } else {
-                PortraitPageContent(page = pages[currentPage])
+                PortraitPageContent(page = pages[currentPage], textVisible = textVisible)
             }
 
             // Layer 2: invisible tap zones with top dead zone
@@ -192,12 +187,7 @@ fun ReaderScreen(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
                                 onClick = {
-                                    if (soundEnabled) {
-                                        viewModel.onCenterTap(pages[currentPage])
-                                    } else {
-                                        showExitOverlay = !showExitOverlay
-                                        if (isLandscape) viewModel.toggleText()
-                                    }
+                                    viewModel.onCenterTap(pages[currentPage])
                                 },
                                 onLongClick = {
                                     showExitOverlay = !showExitOverlay
@@ -331,43 +321,43 @@ fun ReaderScreen(
 }
 
 /**
- * Portrait: full-bleed image edge-to-edge at top, text below.
+ * Portrait: full-bleed image with animated text overlay at bottom.
  */
 @Composable
-private fun PortraitPageContent(page: Page) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.Top,
-        horizontalAlignment = Alignment.CenterHorizontally
+private fun PortraitPageContent(page: Page, textVisible: Boolean) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
     ) {
-        // Full-bleed illustration — no padding, no rounded corners
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(4f / 3f),
-            contentAlignment = Alignment.Center
-        ) {
-            PageIllustration(
-                page = page,
-                contentScale = ContentScale.Crop
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Story text
-        Text(
-            text = page.text,
-            fontSize = 22.sp,
-            lineHeight = 32.sp,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 32.dp, vertical = 8.dp)
+        PageIllustration(
+            page = page,
+            contentScale = ContentScale.Crop
         )
+
+        // Text overlay at bottom
+        AnimatedVisibility(
+            visible = textVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.65f))
+                    .padding(horizontal = 32.dp, vertical = 20.dp)
+            ) {
+                Text(
+                    text = page.text,
+                    fontSize = 20.sp,
+                    lineHeight = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    color = Color.White,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
     }
 }
 
