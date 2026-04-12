@@ -46,6 +46,13 @@ export function Books() {
           {visibleBooks.map((book) => (
             <div key={book.id} className={`book-cover${book.hidden ? " hidden" : ""}`} onClick={() => navigate(`/read/${book.id}`)}>
               <button
+                className="detail-btn"
+                onClick={(e) => { e.stopPropagation(); navigate(`/reader/${book.id}`); }}
+                title="Classic reader & debug"
+              >
+                🔍
+              </button>
+              <button
                 className="visibility-btn"
                 onClick={(e) => toggleHidden(e, book)}
                 title={book.hidden ? "Show on device" : "Hide from device"}
