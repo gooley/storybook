@@ -8,6 +8,7 @@ import com.gooley.storybook.data.api.GenerationStatus
 import com.gooley.storybook.data.db.StorybookDatabase
 import com.gooley.storybook.data.model.Book
 import com.gooley.storybook.data.model.Page
+import com.gooley.storybook.data.model.PageAudio
 import com.gooley.storybook.data.sync.SyncClient
 import com.gooley.storybook.data.sync.SyncManager
 import com.gooley.storybook.data.sync.SyncWorker
@@ -21,6 +22,7 @@ class BookRepository(private val context: Context) {
     private val pageDao = db.pageDao()
     private val characterDao = db.characterDao()
     private val locationDao = db.locationDao()
+    private val pageAudioDao = db.pageAudioDao()
     private val generationClient = GenerationClient()
     private val syncManager = SyncManager(context)
     private val prefs = context.getSharedPreferences("generation", Context.MODE_PRIVATE)
@@ -32,6 +34,8 @@ class BookRepository(private val context: Context) {
     fun getPagesForBook(bookId: Long): Flow<List<Page>> = pageDao.getPagesForBook(bookId)
 
     suspend fun deleteBook(book: Book) = bookDao.softDelete(book.id)
+
+    suspend fun getAudioForPage(pageId: Long): List<PageAudio> = pageAudioDao.getForPage(pageId)
 
     /** Generate a nanoid-style short random ID (21 chars, URL-safe). */
     private fun generateId(): String {

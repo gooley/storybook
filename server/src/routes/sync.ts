@@ -31,6 +31,9 @@ router.get("/changes", (req: Request, res: Response) => {
        WHERE l.updated_at > ? OR lp.created_at > ?`
     )
     .all(since, since);
+  const page_audio = db
+    .prepare("SELECT * FROM page_audio WHERE updated_at > ?")
+    .all(since);
 
   res.json({
     characters,
@@ -38,6 +41,7 @@ router.get("/changes", (req: Request, res: Response) => {
     pages,
     locations,
     location_photos,
+    page_audio,
     server_time: Date.now(),
   });
 });

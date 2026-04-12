@@ -7,8 +7,10 @@ import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,6 +60,7 @@ import coil3.compose.AsyncImage
 import com.gooley.storybook.data.model.Page
 import com.gooley.storybook.data.repository.BookRepository
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ReaderScreen(
     bookId: Long,
@@ -69,15 +72,26 @@ fun ReaderScreen(
     val pages by viewModel.pages.collectAsState()
     val isRegenerating by viewModel.isRegenerating.collectAsState()
     val progress by viewModel.progress.collectAsState()
+    val soundEnabled by viewModel.soundEnabled.collectAsState()
+    val textVisible by viewModel.textVisible.collectAsState()
+    val pageAudioMap by viewModel.pageAudioMap.collectAsState()
 
     var currentPage by remember { mutableIntStateOf(0) }
     var showExitOverlay by remember { mutableStateOf(false) }
-    var showTextBar by remember { mutableStateOf(true) }
 
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
+    val hasAudio = pageAudioMap.isNotEmpty()
+
     Log.d("ReaderScreen", "Render: bookId=$bookId, pages.size=${pages.size}, landscape=$isLandscape, pages=${pages.map { "p${it.pageNumber}(${it.imageStatus})" }}")
+
+    // Load audio when pages change
+    LaunchedEffect(pages) {
+        if (pages.isNotEmpty()) {
+            viewModel.loadAudioForPages(pages)
+        }
+    }
 
     // Auto-regenerate illustrations if any are missing
     LaunchedEffect(pages.map { it.imageStatus }) {
@@ -86,9 +100,19 @@ fun ReaderScreen(
         }
     }
 
-    // Immersive sticky mode: hides status bar and nav bar to prevent kids
-    // from accidentally pulling down notifications or triggering back gestures.
-    // Bars briefly reappear on edge swipe then auto-hide.
+    // Play ambient on page change
+    LaunchedEffect(currentPage, soundEnabled) {
+        if (pages.isNotEmpty() && currentPage < pages.size) {
+            viewModel.onPageChange(pages[currentPage])
+        }
+    }
+
+    // Cleanup audio on dispose
+    DisposableEffect(viewModel) {
+        onDispose { viewModel.audioManager.release() }
+    }
+
+    // Immersive sticky mode
     val view = LocalView.current
     DisposableEffect(Unit) {
         val window = (view.context as Activity).window
@@ -99,7 +123,6 @@ fun ReaderScreen(
         controller.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 
-        // Prevent touches near the top from revealing the status bar
         window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
 
         onDispose {
@@ -130,7 +153,7 @@ fun ReaderScreen(
         if (currentPage >= pages.size) currentPage = pages.size - 1
 
         Box(modifier = Modifier.fillMaxSize()) {
-            // Layer 1: page content (image + text in portrait, image only in landscape)
+            // Layer 1: page content
             if (isLandscape) {
                 LandscapePageContent(page = pages[currentPage])
             } else {
@@ -139,7 +162,7 @@ fun ReaderScreen(
 
             // Layer 2: invisible tap zones with top dead zone
             Column(modifier = Modifier.fillMaxSize()) {
-                // Top 10% dead zone — lets the Android control bar pull-down through
+                // Top 10% dead zone
                 Spacer(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.1f))
 
                 // Tap zones fill the remaining 90%
@@ -156,22 +179,30 @@ fun ReaderScreen(
                                 if (currentPage > 0) {
                                     currentPage--
                                     showExitOverlay = false
-                                    showTextBar = true
+                                    viewModel.showText()
                                 }
                             }
                     )
-                    // Center 60% — toggle exit overlay (and hide text in landscape)
+                    // Center 60% — tap: toggle text/SFX, long-press: exit overlay
                     Box(
                         modifier = Modifier
                             .weight(3f)
                             .fillMaxHeight()
-                            .clickable(
+                            .combinedClickable(
                                 interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) {
-                                showExitOverlay = !showExitOverlay
-                                if (isLandscape) showTextBar = !showTextBar
-                            }
+                                indication = null,
+                                onClick = {
+                                    if (soundEnabled) {
+                                        viewModel.onCenterTap(pages[currentPage])
+                                    } else {
+                                        showExitOverlay = !showExitOverlay
+                                        if (isLandscape) viewModel.toggleText()
+                                    }
+                                },
+                                onLongClick = {
+                                    showExitOverlay = !showExitOverlay
+                                }
+                            )
                     )
                     // Right 20% — next page
                     Box(
@@ -185,17 +216,17 @@ fun ReaderScreen(
                                 if (currentPage < pages.size - 1) {
                                     currentPage++
                                     showExitOverlay = false
-                                    showTextBar = true
+                                    viewModel.showText()
                                 }
                             }
                     )
                 }
             }
 
-            // Layer 3: landscape bottom text bar — visible by default, toggles with center tap
+            // Layer 3: landscape bottom text bar
             if (isLandscape) {
                 AnimatedVisibility(
-                    visible = showTextBar,
+                    visible = textVisible,
                     enter = fadeIn(),
                     exit = fadeOut(),
                     modifier = Modifier.align(Alignment.BottomCenter)
@@ -219,7 +250,7 @@ fun ReaderScreen(
                 }
             }
 
-            // Layer 4: exit overlay — above tap zones, works in both orientations
+            // Layer 4: exit overlay
             AnimatedVisibility(
                 visible = showExitOverlay,
                 enter = fadeIn(),
@@ -235,19 +266,46 @@ fun ReaderScreen(
                         )
                         .padding(8.dp)
                 ) {
-                    FilledTonalButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ExitToApp,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-                        Text("Exit Book")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        FilledTonalButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ExitToApp,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.padding(horizontal = 4.dp))
+                            Text("Exit Book")
+                        }
+                        if (hasAudio) {
+                            Spacer(modifier = Modifier.padding(horizontal = 4.dp))
+                            FilledTonalButton(onClick = { viewModel.toggleSound() }) {
+                                Text(if (soundEnabled) "🔊" else "🔇")
+                            }
+                        }
                     }
                 }
             }
 
-            // Page indicator — top-right in landscape, bottom-center in portrait
+            // Audio indicator — top-left when sound is enabled (always visible)
+            if (hasAudio && soundEnabled) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 16.dp, top = 16.dp)
+                        .background(
+                            Color.Black.copy(alpha = 0.4f),
+                            RoundedCornerShape(12.dp)
+                        )
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "🔊",
+                        fontSize = 16.sp
+                    )
+                }
+            }
+
+            // Page indicator
             Box(
                 modifier = Modifier
                     .align(if (isLandscape) Alignment.TopEnd else Alignment.BottomCenter)
