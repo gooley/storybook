@@ -226,3 +226,19 @@ export interface GenerationLog {
 
 export const getBookGenerationLogs = (bookId: string) =>
   request<GenerationLog[]>(`/books/${bookId}/generation-logs`);
+
+// Audio API
+export interface PageAudio {
+  id: string;
+  page_id: string;
+  audio_type: "ambient" | "sfx";
+  description: string;
+  audio_path: string | null;
+  duration_seconds: number | null;
+  sort_order: number;
+  status: string;
+}
+
+export const getPageAudio = (pageId: string) =>
+  request<PageAudio[]>(`/books/pages/${pageId}/audio`);
+export const getAudioFileUrl = (audioId: string) => `${BASE}/books/audio/${audioId}`;

@@ -7,12 +7,14 @@ import {
   generateStory,
   generateIllustration,
   generateCover,
-  generateVisualContinuityPlan,
+  generateContinuityAndSoundDesign,
   CharacterRef,
   LocationRef,
   GenerationResult,
   TraceMetadata,
+  PageDesign,
 } from "./openrouter";
+import { generateSoundEffect, hasElevenLabsKey } from "./elevenlabs";
 
 // --- Generation Log Helper ---
 
@@ -22,7 +24,7 @@ function saveGenerationLog(
     jobId: string;
     bookId: string | null;
     pageId: string | null;
-    stepType: "story" | "illustration" | "cover";
+    stepType: "story" | "illustration" | "cover" | "sound_design" | "audio";
   }
 ) {
   const id = nanoid();
@@ -255,10 +257,12 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
   const uploadsDir = getUploadsDir();
   const illustrationsDir = path.join(uploadsDir, "illustrations");
   const coversDir = path.join(uploadsDir, "covers");
+  const audioDir = path.join(uploadsDir, "audio");
   const now = Date.now();
+  const audioEnabled = hasElevenLabsKey();
 
-  // total_steps = 1 (story) + pageCount (illustrations) + 1 (cover)
-  const totalSteps = pageCount + 2;
+  // total_steps = 1 (story) + pageCount (illustrations) + 1 (cover) + 1 (audio, if enabled)
+  const totalSteps = pageCount + 2 + (audioEnabled ? 1 : 0);
 
   updateJobStatus(job.id, {
     status: "generating_story",
@@ -317,12 +321,12 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
 
   if (isJobCancelled(job.id)) return;
 
-  // Step 1b: Generate visual continuity plan
+  // Step 1b: Generate visual continuity plan + sound design (combined)
   updateJobStatus(job.id, {
-    progress_message: "Planning visual continuity across pages...",
+    progress_message: "Planning visual continuity and sound design...",
   });
 
-  const continuityResult = await generateVisualContinuityPlan(
+  const designResult = await generateContinuityAndSoundDesign(
     story,
     characters,
     locations,
@@ -333,13 +337,13 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
       totalPages: pageCount,
     }
   );
-  const visualDirections = continuityResult.data;
+  const pageDesigns = designResult.data;
 
-  saveGenerationLog(continuityResult, {
+  saveGenerationLog(designResult, {
     jobId: job.id,
     bookId,
     pageId: null,
-    stepType: "story",
+    stepType: "sound_design",
   });
 
   if (isJobCancelled(job.id)) return;
@@ -348,6 +352,9 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
   const completedImagePaths: string[] = [];
   const completedPageIds: string[] = [];
   let completedSteps = 1;
+
+  // Extract visual directions from combined design result
+  const visualDirections = pageDesigns.map((d) => d.visualDirection);
 
   for (let i = 0; i < story.pages.length; i++) {
     if (isJobCancelled(job.id)) return;
@@ -447,6 +454,118 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
     progress_fraction: completedSteps / totalSteps,
     completed_steps: completedSteps,
   });
+
+  // Step 4: Generate audio (if ElevenLabs is configured)
+  if (audioEnabled && pageDesigns.length > 0) {
+    if (isJobCancelled(job.id)) return;
+
+    updateJobStatus(job.id, {
+      status: "generating_audio",
+      progress_message: "Generating sound effects...",
+    });
+
+    // Create page_audio rows for all pages
+    const audioEntries: Array<{
+      id: string;
+      pageId: string;
+      audioType: "ambient" | "sfx";
+      description: string;
+      durationHint: number;
+      sortOrder: number;
+    }> = [];
+
+    for (let i = 0; i < pageIds.length; i++) {
+      const design = pageDesigns[i];
+      if (!design) continue;
+
+      // Ambient track
+      if (design.ambient) {
+        const audioId = nanoid();
+        audioEntries.push({
+          id: audioId,
+          pageId: pageIds[i],
+          audioType: "ambient",
+          description: design.ambient,
+          durationHint: 22,
+          sortOrder: 0,
+        });
+      }
+
+      // SFX tracks
+      if (design.sfx) {
+        for (let s = 0; s < design.sfx.length; s++) {
+          const sfx = design.sfx[s];
+          const audioId = nanoid();
+          audioEntries.push({
+            id: audioId,
+            pageId: pageIds[i],
+            audioType: "sfx",
+            description: sfx.description,
+            durationHint: sfx.durationHint,
+            sortOrder: s + 1,
+          });
+        }
+      }
+    }
+
+    // Insert all page_audio rows as pending
+    const insertAudio = db.prepare(
+      `INSERT INTO page_audio (id, page_id, audio_type, description, sort_order, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`
+    );
+    const audioNow = Date.now();
+    for (const entry of audioEntries) {
+      insertAudio.run(
+        entry.id,
+        entry.pageId,
+        entry.audioType,
+        entry.description,
+        entry.sortOrder,
+        audioNow,
+        audioNow
+      );
+    }
+
+    // Generate all audio clips in parallel (limit concurrency)
+    const audioLimit = pLimit(4);
+    const audioPromises = audioEntries.map((entry) =>
+      audioLimit(async () => {
+        if (isJobCancelled(job.id)) return;
+
+        db.prepare(
+          "UPDATE page_audio SET status = 'generating', updated_at = ? WHERE id = ?"
+        ).run(Date.now(), entry.id);
+
+        const outputPath = path.join(audioDir, `${entry.id}.mp3`);
+        const isAmbient = entry.audioType === "ambient";
+
+        const result = await generateSoundEffect(entry.description, outputPath, {
+          looping: isAmbient,
+          durationSeconds: isAmbient ? 22 : entry.durationHint,
+          promptInfluence: isAmbient ? 0.5 : 0.7,
+        });
+
+        if (result.success) {
+          db.prepare(
+            "UPDATE page_audio SET audio_path = ?, duration_seconds = ?, status = 'done', updated_at = ? WHERE id = ?"
+          ).run(`audio/${entry.id}.mp3`, result.durationSeconds, Date.now(), entry.id);
+        } else {
+          console.error(`Audio generation failed for ${entry.id}: ${result.error}`);
+          db.prepare(
+            "UPDATE page_audio SET status = 'error', updated_at = ? WHERE id = ?"
+          ).run(Date.now(), entry.id);
+        }
+      })
+    );
+
+    await Promise.all(audioPromises);
+
+    completedSteps++;
+    updateJobStatus(job.id, {
+      progress_fraction: completedSteps / totalSteps,
+      completed_steps: completedSteps,
+    });
+  }
 
   // Mark book as ready
   db.prepare(

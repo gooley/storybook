@@ -19,6 +19,7 @@ data class SyncPullResponse(
     val pages: List<SyncPage> = emptyList(),
     val locations: List<SyncLocation> = emptyList(),
     @SerialName("location_photos") val locationPhotos: List<SyncLocationPhoto> = emptyList(),
+    @SerialName("page_audio") val pageAudio: List<SyncPageAudio> = emptyList(),
     @SerialName("server_time") val serverTime: Long = 0
 )
 
@@ -93,4 +94,18 @@ data class SyncLocationPhoto(
     @SerialName("photo_path") val photoPath: String? = null,
     @SerialName("sort_order") val sortOrder: Int = 0,
     @SerialName("created_at") val createdAt: Long
+)
+
+@Serializable
+data class SyncPageAudio(
+    val id: String,
+    @SerialName("page_id") val pageId: String,
+    @SerialName("audio_type") val audioType: String,
+    val description: String,
+    @SerialName("audio_path") val audioPath: String? = null,
+    @SerialName("duration_seconds") val durationSeconds: Double? = null,
+    @SerialName("sort_order") val sortOrder: Int = 0,
+    val status: String = "done",
+    @SerialName("created_at") val createdAt: Long,
+    @SerialName("updated_at") val updatedAt: Long
 )

@@ -16,6 +16,7 @@ fs.mkdirSync(path.join(DATA_DIR, "uploads", "illustrations"), {
 });
 fs.mkdirSync(path.join(DATA_DIR, "uploads", "locations"), { recursive: true });
 fs.mkdirSync(path.join(DATA_DIR, "uploads", "elements"), { recursive: true });
+fs.mkdirSync(path.join(DATA_DIR, "uploads", "audio"), { recursive: true });
 
 const db: import("better-sqlite3").Database = new Database(DB_PATH);
 
@@ -153,6 +154,24 @@ export function migrate(): void {
   } catch (_) {
     // Column already exists
   }
+
+  // Migration: add page_audio table for sound effects
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS page_audio (
+      id TEXT PRIMARY KEY,
+      page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+      audio_type TEXT NOT NULL,
+      description TEXT NOT NULL,
+      audio_path TEXT,
+      duration_seconds REAL,
+      sort_order INTEGER DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_page_audio_page_id ON page_audio(page_id);
+    CREATE INDEX IF NOT EXISTS idx_page_audio_updated ON page_audio(updated_at);
+  `);
 
   // Startup recovery: mark orphaned in-progress jobs as error
   db.prepare(`

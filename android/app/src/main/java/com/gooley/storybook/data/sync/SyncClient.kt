@@ -101,6 +101,7 @@ class SyncClient {
     fun getLocationPhotoUrl(locationUuid: String, photoUuid: String) = "$baseUrl/api/locations/$locationUuid/photos/$photoUuid"
     fun getBookCoverUrl(uuid: String) = "$baseUrl/api/books/$uuid/cover"
     fun getPageImageUrl(pageUuid: String) = "$baseUrl/api/books/pages/$pageUuid/image"
+    fun getAudioFileUrl(audioId: String) = "$baseUrl/api/books/audio/$audioId"
 
     private fun uploadFile(url: String, fieldName: String, file: File): Boolean {
         return try {

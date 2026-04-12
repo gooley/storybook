@@ -289,18 +289,30 @@ function parseStoryResponse(content: string): StoryResponse {
 
 // --- Public API ---
 
+export interface SoundDesignSfx {
+  description: string;
+  durationHint: number;
+}
+
+export interface PageDesign {
+  visualDirection: string;
+  ambient: string;
+  sfx: SoundDesignSfx[];
+}
+
 /**
- * Generates a per-page visual continuity plan by analyzing all page texts together.
- * Returns an array of visual direction strings, one per page, describing what
- * should be visually consistent/different on each page.
+ * Generates a combined per-page visual continuity plan and sound design
+ * by analyzing all page texts together in a single LLM call.
+ * Returns an array of PageDesign objects, one per page, with visual directions
+ * and audio prompts optimized for ElevenLabs sound generation.
  */
-export async function generateVisualContinuityPlan(
+export async function generateContinuityAndSoundDesign(
   story: StoryResponse,
   characters: CharacterRef[],
   locations: LocationRef[],
   model?: string,
   trace?: TraceMetadata
-): Promise<GenerationResult<string[]>> {
+): Promise<GenerationResult<PageDesign[]>> {
   const useModel = model || DEFAULT_STORY_MODEL;
   const startTime = Date.now();
 
@@ -326,30 +338,59 @@ export async function generateVisualContinuityPlan(
     .map((p) => `Page ${p.pageNumber}: ${p.text}`)
     .join("\n");
 
-  const systemPrompt = `You are an art director for a children's storybook illustration team. Your job is to ensure visual consistency across all pages by writing precise visual directions for each page's illustration.
+  const systemPrompt = `You are a creative director for a children's storybook, responsible for both illustration art direction and sound design. Your job is to ensure visual consistency across pages AND design immersive audio for each page.
 
-For EACH page, describe:
+For EACH page, provide TWO things:
+
+## VISUAL DIRECTION
 - Character poses, expressions, and actions (what exactly are they doing?)
 - Clothing/costumes/accessories (what is each character wearing? track changes explicitly)
 - Setting details (where are they? what's in the background? time of day? lighting?)
 - Key props and objects (what items are present? where are they positioned?)
 - Any visual changes from the previous page (what specifically changed and what stayed the same?)
 
-CRITICAL RULES:
-- If a character puts on a costume/outfit on page 1, they must STILL be wearing it on subsequent pages unless the story explicitly says they changed.
-- If a character falls asleep, they stay asleep until the story says they wake up (and vice versa).
-- Track the physical state of every character and prop across pages. Be explicit about what persists.
-- Note the setting/background for each page — if the scene hasn't changed, the background should match.
+## SOUND DESIGN
+- **Ambient**: A single background soundscape description that loops during the page. Describe the environmental atmosphere — weather, nature sounds, room tone, crowd noise, etc. Be specific and evocative. Use audio terminology: ambience, drone, texture, atmosphere.
+- **SFX**: 1-3 short event sound effects for key story moments on this page. These are one-shot sounds triggered by the reader. Use descriptive audio language: impact, whoosh, one-shot, creak, splash, etc. Include a duration hint (2-8 seconds).
 
-Format your response as a JSON array of strings, one per page. Each string should be a concise visual direction paragraph (3-5 sentences).
-Return ONLY the JSON array, no other text.`;
+CRITICAL VISUAL RULES:
+- If a character puts on a costume/outfit on page 1, they must STILL be wearing it on subsequent pages unless the story explicitly says they changed.
+- Track the physical state of every character and prop across pages.
+- Note the setting/background for each page.
+
+CRITICAL SOUND RULES:
+- Ambient should be atmospheric and loopable (no sudden starts/stops).
+- SFX should match specific actions or events described in the page text.
+- Write prompts optimized for AI sound generation — be descriptive but concise.
+- If a page has no distinct sound events, use an empty sfx array.
+
+Format your response as a JSON object with a "pages" array. Each element has:
+- "visualDirection": string (3-5 sentences of illustration direction)
+- "ambient": string (atmospheric sound description for looping background audio)
+- "sfx": array of objects with "description" (string) and "durationHint" (number, seconds 2-8)
+
+Example:
+{
+  "pages": [
+    {
+      "visualDirection": "Luna stands at the forest edge wearing her red cape...",
+      "ambient": "Gentle forest ambience with birdsong, soft wind rustling through oak leaves, and distant stream babbling",
+      "sfx": [
+        { "description": "Wooden gate creaking open slowly with rusty hinges", "durationHint": 3 },
+        { "description": "Small bird chirping a short melodic phrase nearby", "durationHint": 2 }
+      ]
+    }
+  ]
+}
+
+Return ONLY the JSON object, no other text.`;
 
   const userPrompt = `Here is the full story for "${story.title}":
 ${characterContext}${locationContext}
 
 ${allPagesText}
 
-Write visual directions for each of the ${story.pages.length} pages to ensure illustration consistency.`;
+Write visual directions and sound design for each of the ${story.pages.length} pages.`;
 
   try {
     const response = await makeRequest({
@@ -365,22 +406,35 @@ Write visual directions for each of the ${story.pages.length} pages to ensure il
     const content = response.choices?.[0]?.message?.content;
     if (!content) throw new Error("No response from LLM");
 
-    // Parse the JSON array from the response
+    // Parse the JSON response
     let jsonStr = content
       .replace(/```json\s*/g, "")
       .replace(/```\s*/g, "")
       .trim();
 
-    const arrStart = jsonStr.indexOf("[");
-    const arrEnd = jsonStr.lastIndexOf("]");
-    if (arrStart >= 0 && arrEnd > arrStart) {
-      jsonStr = jsonStr.substring(arrStart, arrEnd + 1);
+    const objStart = jsonStr.indexOf("{");
+    const objEnd = jsonStr.lastIndexOf("}");
+    if (objStart >= 0 && objEnd > objStart) {
+      jsonStr = jsonStr.substring(objStart, objEnd + 1);
     }
 
-    const directions = JSON.parse(jsonStr) as string[];
+    const parsed = JSON.parse(jsonStr) as { pages: PageDesign[] };
+    const pageDesigns = parsed.pages || [];
+
+    // Validate and fill defaults
+    const designs: PageDesign[] = pageDesigns.map((pd: any) => ({
+      visualDirection: pd.visualDirection || "",
+      ambient: pd.ambient || "",
+      sfx: Array.isArray(pd.sfx)
+        ? pd.sfx.map((s: any) => ({
+            description: s.description || "",
+            durationHint: Math.max(2, Math.min(8, s.durationHint || 4)),
+          }))
+        : [],
+    }));
 
     return {
-      data: directions,
+      data: designs,
       model: useModel,
       prompt: userPrompt,
       systemPrompt,
@@ -394,8 +448,7 @@ Write visual directions for each of the ${story.pages.length} pages to ensure il
       durationMs: Date.now() - startTime,
     };
   } catch (e: any) {
-    console.error("Visual continuity plan generation error:", e);
-    // Return empty array on failure — illustrations can still proceed without it
+    console.error("Continuity and sound design generation error:", e);
     return {
       data: [],
       model: useModel,

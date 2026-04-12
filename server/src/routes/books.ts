@@ -359,4 +359,34 @@ router.get("/pages/:pageId/image", (req: Request, res: Response) => {
   res.sendFile(filePath);
 });
 
+// Get audio entries for a page
+router.get("/pages/:pageId/audio", (req: Request, res: Response) => {
+  const audioEntries = db
+    .prepare(
+      "SELECT * FROM page_audio WHERE page_id = ? AND status = 'done' ORDER BY audio_type DESC, sort_order ASC"
+    )
+    .all(req.params.pageId);
+  res.json(audioEntries);
+});
+
+// Stream audio file
+router.get("/audio/:audioId", (req: Request, res: Response) => {
+  const audio = db
+    .prepare("SELECT audio_path FROM page_audio WHERE id = ?")
+    .get(req.params.audioId) as any;
+  if (!audio?.audio_path) {
+    res.status(404).json({ error: "Audio not found" });
+    return;
+  }
+
+  const filePath = path.join(getUploadsDir(), audio.audio_path);
+  if (!fs.existsSync(filePath)) {
+    res.status(404).json({ error: "Audio file missing" });
+    return;
+  }
+
+  res.setHeader("Content-Type", "audio/mpeg");
+  res.sendFile(filePath);
+});
+
 export default router;

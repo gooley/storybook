@@ -11,13 +11,15 @@ import com.gooley.storybook.data.model.Character
 import com.gooley.storybook.data.model.Location
 import com.gooley.storybook.data.model.LocationPhoto
 import com.gooley.storybook.data.model.Page
+import com.gooley.storybook.data.model.PageAudio
 
-@Database(entities = [Book::class, Page::class, Character::class, Location::class, LocationPhoto::class], version = 6, exportSchema = false)
+@Database(entities = [Book::class, Page::class, Character::class, Location::class, LocationPhoto::class, PageAudio::class], version = 7, exportSchema = false)
 abstract class StorybookDatabase : RoomDatabase() {
     abstract fun bookDao(): BookDao
     abstract fun pageDao(): PageDao
     abstract fun characterDao(): CharacterDao
     abstract fun locationDao(): LocationDao
+    abstract fun pageAudioDao(): PageAudioDao
 
     companion object {
         @Volatile
@@ -179,6 +181,30 @@ abstract class StorybookDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS page_audio (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        uuid TEXT NOT NULL,
+                        pageLocalId INTEGER NOT NULL,
+                        pageUuid TEXT NOT NULL,
+                        audioType TEXT NOT NULL,
+                        description TEXT NOT NULL,
+                        audioPath TEXT,
+                        durationSeconds REAL,
+                        sortOrder INTEGER NOT NULL,
+                        status TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL,
+                        FOREIGN KEY(pageLocalId) REFERENCES pages(id) ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_page_audio_uuid ON page_audio(uuid)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_page_audio_pageLocalId ON page_audio(pageLocalId)")
+            }
+        }
+
         fun getInstance(context: Context): StorybookDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -186,7 +212,7 @@ abstract class StorybookDatabase : RoomDatabase() {
                     StorybookDatabase::class.java,
                     "storybook.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .build()
                 INSTANCE = instance
                 instance

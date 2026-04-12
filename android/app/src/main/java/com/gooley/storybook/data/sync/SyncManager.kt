@@ -8,6 +8,7 @@ import com.gooley.storybook.data.model.Character
 import com.gooley.storybook.data.model.Location
 import com.gooley.storybook.data.model.LocationPhoto
 import com.gooley.storybook.data.model.Page
+import com.gooley.storybook.data.model.PageAudio
 import java.io.File
 
 class SyncManager(
@@ -19,10 +20,12 @@ class SyncManager(
     private val pageDao = db.pageDao()
     private val characterDao = db.characterDao()
     private val locationDao = db.locationDao()
+    private val pageAudioDao = db.pageAudioDao()
     private val prefs = context.getSharedPreferences("sync", Context.MODE_PRIVATE)
     private val illustrationsDir = File(context.filesDir, "illustrations").also { it.mkdirs() }
     private val photosDir = File(context.filesDir, "character_photos").also { it.mkdirs() }
     private val locationPhotosDir = File(context.filesDir, "location_photos").also { it.mkdirs() }
+    private val audioDir = File(context.filesDir, "audio").also { it.mkdirs() }
 
     suspend fun sync() {
         if (!client.isConfigured()) {
@@ -280,6 +283,36 @@ class SyncManager(
             }
         }
 
+        // Upsert page audio
+        for (spa in response.pageAudio) {
+            if (spa.status != "done" || spa.audioPath == null) continue
+            val pageLocal = pageDao.getByUuid(spa.pageId) ?: continue
+            val existing = pageAudioDao.getByUuid(spa.id)
+
+            if (existing == null) {
+                val localId = pageAudioDao.upsert(PageAudio(
+                    uuid = spa.id,
+                    pageLocalId = pageLocal.id,
+                    pageUuid = spa.pageId,
+                    audioType = spa.audioType,
+                    description = spa.description,
+                    durationSeconds = spa.durationSeconds,
+                    sortOrder = spa.sortOrder,
+                    status = spa.status,
+                    createdAt = spa.createdAt,
+                    updatedAt = spa.updatedAt
+                ))
+                downloadAudioFile(spa.id, localId)
+            } else {
+                // Repair: re-download if local file is missing
+                val localFile = existing.audioPath?.let { File(it) }
+                if (localFile == null || !localFile.exists()) {
+                    Log.d(TAG, "Repairing missing audio for ${spa.id}")
+                    downloadAudioFile(spa.id, existing.id)
+                }
+            }
+        }
+
         // Update last sync time
         prefs.edit().putLong("last_sync_time", response.serverTime).apply()
         Log.d(TAG, "Pull complete, server_time=${response.serverTime}")
@@ -323,6 +356,13 @@ class SyncManager(
         val destFile = File(locationPhotosDir, "loc_photo_${localId}_synced.jpg")
         if (client.downloadFile(client.getLocationPhotoUrl(locationUuid, photoUuid), destFile)) {
             locationDao.updatePhotoPath(localId, destFile.absolutePath)
+        }
+    }
+
+    private suspend fun downloadAudioFile(audioUuid: String, localId: Long) {
+        val destFile = File(audioDir, "audio_${localId}_synced.mp3")
+        if (client.downloadFile(client.getAudioFileUrl(audioUuid), destFile)) {
+            pageAudioDao.updateAudioPath(localId, destFile.absolutePath)
         }
     }
 
