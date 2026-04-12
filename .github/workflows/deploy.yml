@@ -14,8 +14,8 @@ permissions:
 
 env:
   AWS_REGION: us-east-1
-  ECR_URI: 943179516876.dkr.ecr.us-east-1.amazonaws.com/gool3yhost
-  APP_DIR: /opt/gool3yhost/apps/storybook
+  ECR_URI: ${{ secrets.ECR_URI }}
+  APP_DIR: ${{ vars.APP_DIR }}
 
 jobs:
   deploy:
@@ -26,7 +26,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::943179516876:role/gool3yhost-github-actions
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
@@ -46,12 +46,12 @@ jobs:
         id: target
         run: |
           INSTANCE_ID=$(aws ec2 describe-instances \
-            --filters "Name=tag:gool3yhost,Values=true" "Name=instance-state-name,Values=running" \
+            --filters "Name=tag:${{ vars.INSTANCE_TAG }},Values=true" "Name=instance-state-name,Values=running" \
             --query 'Reservations[0].Instances[0].InstanceId' \
             --output text --region ${{ env.AWS_REGION }})
           echo "Instance ID: $INSTANCE_ID"
           if [ "$INSTANCE_ID" = "None" ] || [ -z "$INSTANCE_ID" ]; then
-            echo "::error::No running instance found with tag gool3yhost=true"
+            echo "::error::No running instance found with tag ${{ vars.INSTANCE_TAG }}=true"
             exit 1
           fi
           echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
@@ -59,7 +59,7 @@ jobs:
       - name: Sync compose file to host
         run: |
           INSTANCE_ID="${{ steps.target.outputs.instance_id }}"
-          COMPOSE_B64=$(base64 -w0 docker-compose.yml)
+          COMPOSE_B64=$(echo '${{ secrets.DOCKER_COMPOSE_PRODUCTION }}' | base64 -w0)
           COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --instance-ids "$INSTANCE_ID" \
@@ -85,7 +85,7 @@ jobs:
           DEPLOY_CMD="$DEPLOY_CMD && cd ${{ env.APP_DIR }}"
           DEPLOY_CMD="$DEPLOY_CMD && ECR_URI=${{ env.ECR_URI }} IMAGE_TAG=${{ github.sha }} docker compose pull"
           DEPLOY_CMD="$DEPLOY_CMD && ECR_URI=${{ env.ECR_URI }} IMAGE_TAG=${{ github.sha }} docker compose up -d"
-          DEPLOY_CMD="$DEPLOY_CMD && cd /opt/gool3yhost/traefik && docker compose restart traefik"
+          DEPLOY_CMD="$DEPLOY_CMD && cd ${{ vars.TRAEFIK_DIR }} && docker compose restart traefik"
 
           COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
