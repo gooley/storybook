@@ -44,7 +44,7 @@ export function Books() {
       ) : (
         <div className="card-grid">
           {visibleBooks.map((book) => (
-            <div key={book.id} className={`book-cover${book.hidden ? " hidden" : ""}`} onClick={() => navigate(`/reader/${book.id}`)}>
+            <div key={book.id} className={`book-cover${book.hidden ? " hidden" : ""}`} onClick={() => navigate(`/read/${book.id}`)}>
               <button
                 className="visibility-btn"
                 onClick={(e) => toggleHidden(e, book)}

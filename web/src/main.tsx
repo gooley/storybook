@@ -5,6 +5,7 @@ import { Featured } from "./pages/Featured";
 import { Books } from "./pages/Books";
 import { CreateBook } from "./pages/CreateBook";
 import { Reader } from "./pages/Reader";
+import { FullscreenReader } from "./pages/FullscreenReader";
 import { BookDebug } from "./pages/BookDebug";
 import { AllImages } from "./pages/AllImages";
 import { SetupWizard } from "./pages/SetupWizard";
@@ -92,6 +93,7 @@ function App() {
             <Route path="/" element={<Books />} />
             <Route path="/create" element={<CreateBook />} />
             <Route path="/featured" element={<Featured />} />
+            <Route path="/read/:bookId" element={<FullscreenReader />} />
             <Route path="/reader/:bookId" element={<Reader />} />
             <Route path="/reader/:bookId/debug" element={<BookDebug />} />
             <Route path="/reader/:bookId/images" element={<AllImages />} />
