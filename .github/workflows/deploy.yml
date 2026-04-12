@@ -76,6 +76,54 @@ jobs:
             sleep 5
           done
 
+      - name: Inject env_file if .env exists on host
+        run: |
+          INSTANCE_ID="${{ steps.target.outputs.instance_id }}"
+          APP_DIR="${{ env.APP_DIR }}"
+
+          # Build injection script, base64-encode to sidestep SSM/JSON quoting
+          read -r -d '' INJECT_SCRIPT <<HEREDOC || true
+          #!/bin/bash
+          set -e
+          cd ${APP_DIR}
+          if [ ! -f .env ]; then echo "No .env file, skipping"; exit 0; fi
+          if grep -q "env_file:" docker-compose.yml; then echo "env_file already present, skipping"; exit 0; fi
+          awk '/^  app:/{print; print "    env_file:"; print "    - .env"; next}1' docker-compose.yml > docker-compose.tmp
+          mv docker-compose.tmp docker-compose.yml
+          echo "Injected env_file into compose"
+          HEREDOC
+          SCRIPT_B64=$(echo "$INJECT_SCRIPT" | base64 -w0)
+
+          COMMAND_ID=$(aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --instance-ids "$INSTANCE_ID" \
+            --parameters "commands=[\"echo $SCRIPT_B64 | base64 -d | bash\"]" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Command.CommandId' --output text)
+          for i in $(seq 1 15); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+              --region ${{ env.AWS_REGION }} --output json 2>&1 | \
+              python3 -c "import json,sys; print(json.load(sys.stdin).get('Status','Pending'))" 2>/dev/null || echo "Pending")
+            if [ "$STATUS" = "Success" ]; then
+              echo "env_file injection complete"
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+                --region ${{ env.AWS_REGION }} \
+                --query 'StandardOutputContent' --output text 2>/dev/null || true
+              break
+            fi
+            if [ "$STATUS" = "Failed" ]; then
+              echo "::warning::env_file injection failed (non-fatal)"
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+                --region ${{ env.AWS_REGION }} \
+                --query '[StandardOutputContent, StandardErrorContent]' --output text 2>/dev/null || true
+              break
+            fi
+            sleep 5
+          done
+
       - name: Deploy via SSM
         run: |
           INSTANCE_ID="${{ steps.target.outputs.instance_id }}"
