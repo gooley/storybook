@@ -5,6 +5,8 @@ import {
   changePassword,
   validateApiKey,
   saveApiKey,
+  validateElevenLabsKey,
+  saveElevenLabsKey,
   logout,
 } from "../api/setup";
 
@@ -23,6 +25,11 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
   const [showKeyForm, setShowKeyForm] = useState(false);
   const [newKey, setNewKey] = useState("");
   const [keyLoading, setKeyLoading] = useState(false);
+
+  // ElevenLabs key
+  const [showElevenLabsForm, setShowElevenLabsForm] = useState(false);
+  const [newElevenLabsKey, setNewElevenLabsKey] = useState("");
+  const [elevenLabsLoading, setElevenLabsLoading] = useState(false);
 
   useEffect(() => {
     loadInfo();
@@ -81,6 +88,30 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
       setError(err.message || "Failed to update key");
     } finally {
       setKeyLoading(false);
+    }
+  };
+
+  const handleChangeElevenLabsKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+    setElevenLabsLoading(true);
+    try {
+      const result = await validateElevenLabsKey(newElevenLabsKey.trim());
+      if (!result.valid) {
+        setError(result.error || "Invalid ElevenLabs API key");
+        setElevenLabsLoading(false);
+        return;
+      }
+      await saveElevenLabsKey(newElevenLabsKey.trim());
+      setSuccess("ElevenLabs API key updated successfully");
+      setShowElevenLabsForm(false);
+      setNewElevenLabsKey("");
+      loadInfo();
+    } catch (err: any) {
+      setError(err.message || "Failed to update key");
+    } finally {
+      setElevenLabsLoading(false);
     }
   };
 
@@ -162,6 +193,68 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
                   onClick={() => {
                     setShowKeyForm(false);
                     setNewKey("");
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+
+      {/* ElevenLabs Key Status (Optional) */}
+      <div className="card" style={{ cursor: "default", marginBottom: 16 }}>
+        <div className="card-body">
+          <h3 style={{ marginBottom: 8 }}>🔊 ElevenLabs API Key <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: "normal" }}>(optional — for sound effects)</span></h3>
+          <p style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginBottom: 8 }}>
+            Status:{" "}
+            <strong style={{ color: info.elevenLabsKeyConfigured ? "#2a7a2a" : "var(--text-muted)" }}>
+              {info.elevenLabsKeyConfigured ? "Connected" : "Not configured"}
+            </strong>
+            {info.elevenLabsKeyConfigured && (
+              <>
+                {" "}· Source: {info.elevenLabsKeySource} · Key: {info.elevenLabsKeyPreview}
+              </>
+            )}
+          </p>
+          {!info.elevenLabsKeyConfigured && (
+            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: 8 }}>
+              Add an ElevenLabs key to generate ambient soundscapes and sound effects for your stories.
+            </p>
+          )}
+          {!showElevenLabsForm ? (
+            <button
+              className="btn btn-secondary"
+              onClick={() => setShowElevenLabsForm(true)}
+            >
+              {info.elevenLabsKeyConfigured ? "Change Key" : "Add Key"}
+            </button>
+          ) : (
+            <form onSubmit={handleChangeElevenLabsKey}>
+              <div className="form-group">
+                <input
+                  type="password"
+                  value={newElevenLabsKey}
+                  onChange={(e) => setNewElevenLabsKey(e.target.value)}
+                  placeholder="sk_..."
+                  autoFocus
+                />
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={elevenLabsLoading || !newElevenLabsKey.trim()}
+                >
+                  {elevenLabsLoading ? "Validating..." : "Save"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setShowElevenLabsForm(false);
+                    setNewElevenLabsKey("");
                   }}
                 >
                   Cancel

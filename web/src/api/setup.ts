@@ -16,6 +16,9 @@ export interface SystemInfo extends SetupStatus {
   apiKeyConfigured: boolean;
   apiKeySource: "environment" | "database" | "none";
   apiKeyPreview: string | null;
+  elevenLabsKeyConfigured: boolean;
+  elevenLabsKeySource: "environment" | "database" | "none";
+  elevenLabsKeyPreview: string | null;
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -46,6 +49,18 @@ export const validateApiKey = (apiKey: string) =>
 
 export const saveApiKey = (apiKey: string) =>
   request<{ success: boolean }>("/setup/save-key", {
+    method: "POST",
+    body: JSON.stringify({ apiKey }),
+  });
+
+export const validateElevenLabsKey = (apiKey: string) =>
+  request<{ valid: boolean; error?: string }>("/setup/validate-elevenlabs-key", {
+    method: "POST",
+    body: JSON.stringify({ apiKey }),
+  });
+
+export const saveElevenLabsKey = (apiKey: string) =>
+  request<{ success: boolean }>("/setup/save-elevenlabs-key", {
     method: "POST",
     body: JSON.stringify({ apiKey }),
   });

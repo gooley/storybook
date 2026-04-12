@@ -816,6 +816,227 @@ async function executeRegenerateCovers(job: GenerationJob): Promise<void> {
   });
 }
 
+async function executeGenerateAudio(job: GenerationJob): Promise<void> {
+  const payload = JSON.parse(job.request_payload);
+  const { bookId } = payload;
+
+  interface DbBook {
+    id: string;
+    title: string;
+    description: string;
+  }
+  interface DbPage {
+    id: string;
+    page_number: number;
+    text: string;
+  }
+
+  const book = db
+    .prepare("SELECT id, title, description FROM books WHERE id = ?")
+    .get(bookId) as DbBook | undefined;
+  if (!book) throw new Error(`Book ${bookId} not found`);
+
+  if (!hasElevenLabsKey()) {
+    updateJobStatus(job.id, {
+      status: "done",
+      progress_message: "Skipped — ELEVENLABS_API_KEY not configured",
+      progress_fraction: 1,
+    });
+    return;
+  }
+
+  // Delete existing audio to regenerate fresh
+  const existingAudio = db
+    .prepare(
+      "SELECT id, audio_path FROM page_audio WHERE page_id IN (SELECT id FROM pages WHERE book_id = ? AND deleted_at IS NULL)"
+    )
+    .all(bookId) as Array<{ id: string; audio_path: string | null }>;
+  if (existingAudio.length > 0) {
+    const uploadsDir = getUploadsDir();
+    for (const ea of existingAudio) {
+      if (ea.audio_path) {
+        const filePath = path.join(uploadsDir, ea.audio_path);
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      }
+    }
+    db.prepare(
+      "DELETE FROM page_audio WHERE page_id IN (SELECT id FROM pages WHERE book_id = ? AND deleted_at IS NULL)"
+    ).run(bookId);
+  }
+
+  const pages = db
+    .prepare(
+      "SELECT id, page_number, text FROM pages WHERE book_id = ? AND deleted_at IS NULL ORDER BY page_number"
+    )
+    .all(bookId) as DbPage[];
+
+  if (pages.length === 0) {
+    updateJobStatus(job.id, {
+      status: "done",
+      progress_message: "No pages found",
+      progress_fraction: 1,
+    });
+    return;
+  }
+
+  // Step 1: Sound design via LLM
+  updateJobStatus(job.id, {
+    status: "generating_sound_design",
+    progress_message: "Designing soundscape...",
+    total_steps: 2,
+    completed_steps: 0,
+    book_id: bookId,
+    started_at: Date.now(),
+  });
+
+  const story = {
+    title: book.title,
+    pages: pages.map((p) => ({ pageNumber: p.page_number, text: p.text })),
+  };
+
+  const designResult = await generateContinuityAndSoundDesign(
+    story,
+    [],
+    [],
+    undefined,
+    { bookId, stepType: "sound_design", pageNumber: 0, totalPages: pages.length }
+  );
+
+  saveGenerationLog(designResult, {
+    jobId: job.id,
+    bookId,
+    pageId: null,
+    stepType: "sound_design",
+  });
+
+  const pageDesigns = designResult.data || [];
+  if (pageDesigns.length === 0) {
+    updateJobStatus(job.id, {
+      status: "done",
+      progress_message: "Sound design produced no results",
+      progress_fraction: 1,
+    });
+    return;
+  }
+
+  updateJobStatus(job.id, {
+    completed_steps: 1,
+    progress_fraction: 0.3,
+  });
+
+  // Step 2: Generate audio clips
+  if (isJobCancelled(job.id)) return;
+
+  updateJobStatus(job.id, {
+    status: "generating_audio",
+    progress_message: "Generating sound effects...",
+  });
+
+  const uploadsDir = getUploadsDir();
+  const audioDir = path.join(uploadsDir, "audio");
+
+  const audioEntries: Array<{
+    id: string;
+    pageId: string;
+    audioType: "ambient" | "sfx";
+    description: string;
+    durationHint: number;
+    sortOrder: number;
+  }> = [];
+
+  for (let i = 0; i < pages.length; i++) {
+    const design = pageDesigns[i];
+    if (!design) continue;
+
+    if (design.ambient) {
+      audioEntries.push({
+        id: nanoid(),
+        pageId: pages[i].id,
+        audioType: "ambient",
+        description: design.ambient,
+        durationHint: 22,
+        sortOrder: 0,
+      });
+    }
+
+    if (design.sfx) {
+      for (let s = 0; s < design.sfx.length; s++) {
+        const sfx = design.sfx[s];
+        audioEntries.push({
+          id: nanoid(),
+          pageId: pages[i].id,
+          audioType: "sfx",
+          description: sfx.description,
+          durationHint: sfx.durationHint,
+          sortOrder: s + 1,
+        });
+      }
+    }
+  }
+
+  const insertAudio = db.prepare(
+    `INSERT INTO page_audio (id, page_id, audio_type, description, sort_order, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`
+  );
+  const audioNow = Date.now();
+  for (const entry of audioEntries) {
+    insertAudio.run(
+      entry.id,
+      entry.pageId,
+      entry.audioType,
+      entry.description,
+      entry.sortOrder,
+      audioNow,
+      audioNow
+    );
+  }
+
+  const audioLimit = pLimit(4);
+  const audioPromises = audioEntries.map((entry) =>
+    audioLimit(async () => {
+      if (isJobCancelled(job.id)) return;
+
+      db.prepare(
+        "UPDATE page_audio SET status = 'generating', updated_at = ? WHERE id = ?"
+      ).run(Date.now(), entry.id);
+
+      const outputPath = path.join(audioDir, `${entry.id}.mp3`);
+      const isAmbient = entry.audioType === "ambient";
+
+      const result = await generateSoundEffect(entry.description, outputPath, {
+        looping: isAmbient,
+        durationSeconds: isAmbient ? 22 : entry.durationHint,
+        promptInfluence: isAmbient ? 0.5 : 0.7,
+      });
+
+      if (result.success) {
+        db.prepare(
+          "UPDATE page_audio SET audio_path = ?, duration_seconds = ?, status = 'done', updated_at = ? WHERE id = ?"
+        ).run(`audio/${entry.id}.mp3`, result.durationSeconds, Date.now(), entry.id);
+      } else {
+        console.error(`Audio generation failed for ${entry.id}: ${result.error}`);
+        db.prepare(
+          "UPDATE page_audio SET status = 'error', updated_at = ? WHERE id = ?"
+        ).run(Date.now(), entry.id);
+      }
+    })
+  );
+
+  await Promise.all(audioPromises);
+
+  db.prepare("UPDATE books SET updated_at = ? WHERE id = ?").run(
+    Date.now(),
+    bookId
+  );
+
+  updateJobStatus(job.id, {
+    status: "done",
+    progress_message: "Audio generation complete!",
+    progress_fraction: 1,
+    completed_steps: 2,
+  });
+}
+
 // --- Worker Loop ---
 
 async function processJob(job: GenerationJob): Promise<void> {
@@ -831,6 +1052,9 @@ async function processJob(job: GenerationJob): Promise<void> {
       break;
     case "regenerate_covers":
       await executeRegenerateCovers(job);
+      break;
+    case "generate_audio":
+      await executeGenerateAudio(job);
       break;
     default:
       throw new Error(`Unknown job type: ${jobType}`);

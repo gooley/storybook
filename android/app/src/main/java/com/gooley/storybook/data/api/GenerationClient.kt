@@ -120,6 +120,21 @@ class GenerationClient {
             json.decodeFromString(GenerationStartResponse.serializer(), responseBody)
         }
 
+    suspend fun generateAudio(bookUuid: String): GenerationStartResponse =
+        withContext(Dispatchers.IO) {
+            val httpRequest = Request.Builder()
+                .url("$baseUrl/api/generate/$bookUuid/generate-audio")
+                .post("".toRequestBody("application/json".toMediaType()))
+                .build()
+
+            val response = client.newCall(httpRequest).execute()
+            val responseBody = response.body?.string() ?: throw Exception("Empty response")
+            if (!response.isSuccessful) {
+                throw Exception("Audio generation failed (${response.code}): $responseBody")
+            }
+            json.decodeFromString(GenerationStartResponse.serializer(), responseBody)
+        }
+
     companion object {
         private const val TAG = "GenerationClient"
     }

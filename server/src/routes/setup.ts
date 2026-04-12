@@ -7,6 +7,9 @@ import {
   getOpenRouterKey,
   hasOpenRouterKey,
   getAuthMode,
+  setElevenLabsKey,
+  getElevenLabsKey,
+  hasElevenLabsKey,
 } from "../services/config";
 
 const router = Router();
@@ -75,16 +78,57 @@ router.post("/save-key", (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
+// POST /api/setup/validate-elevenlabs-key — test an ElevenLabs API key
+router.post("/validate-elevenlabs-key", async (req: Request, res: Response) => {
+  const { apiKey } = req.body;
+  if (!apiKey || typeof apiKey !== "string") {
+    res.status(400).json({ error: "API key is required" });
+    return;
+  }
+
+  try {
+    const response = await fetch("https://api.elevenlabs.io/v1/user", {
+      headers: { "xi-api-key": apiKey },
+    });
+
+    if (response.ok) {
+      res.json({ valid: true });
+    } else if (response.status === 401) {
+      res.json({ valid: false, error: "Invalid API key" });
+    } else {
+      res.json({ valid: false, error: `ElevenLabs returned status ${response.status}` });
+    }
+  } catch (err) {
+    res.json({ valid: false, error: "Could not reach ElevenLabs. Check your internet connection." });
+  }
+});
+
+// POST /api/setup/save-elevenlabs-key — save a validated ElevenLabs API key
+router.post("/save-elevenlabs-key", (req: Request, res: Response) => {
+  const { apiKey } = req.body;
+  if (!apiKey || typeof apiKey !== "string") {
+    res.status(400).json({ error: "API key is required" });
+    return;
+  }
+
+  setElevenLabsKey(apiKey);
+  res.json({ success: true });
+});
+
 // GET /api/setup/system — system health info
 router.get("/system", (_req: Request, res: Response) => {
   const status = getSetupStatus();
   const key = getOpenRouterKey();
+  const elevenLabsKey = getElevenLabsKey();
 
   res.json({
     ...status,
     apiKeyConfigured: hasOpenRouterKey(),
     apiKeySource: process.env.OPENROUTER_API_KEY ? "environment" : key ? "database" : "none",
     apiKeyPreview: key ? `sk-or-...${key.slice(-4)}` : null,
+    elevenLabsKeyConfigured: hasElevenLabsKey(),
+    elevenLabsKeySource: process.env.ELEVENLABS_API_KEY ? "environment" : elevenLabsKey ? "database" : "none",
+    elevenLabsKeyPreview: elevenLabsKey ? `...${elevenLabsKey.slice(-4)}` : null,
   });
 });
 
