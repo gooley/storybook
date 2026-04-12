@@ -26,9 +26,15 @@ fun SetupScreen(
 ) {
     val context = LocalContext.current
 
-    // If we got an API key from a deep link, auto-fill and try to connect
-    LaunchedEffect(initialApiKey) {
-        if (initialApiKey != null && viewModel.step == SetupStep.PASSWORD && viewModel.authMode == "external") {
+    // If we got an API key from a deep link, auto-fill once we reach the PASSWORD step
+    var apiKeyApplied by remember { mutableStateOf(false) }
+    LaunchedEffect(initialApiKey, viewModel.step, viewModel.authMode) {
+        if (!apiKeyApplied &&
+            initialApiKey != null &&
+            viewModel.step == SetupStep.PASSWORD &&
+            viewModel.authMode == "external"
+        ) {
+            apiKeyApplied = true
             viewModel.password = initialApiKey
             viewModel.login()
         }
