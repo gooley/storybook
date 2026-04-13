@@ -263,7 +263,7 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
   const coversDir = path.join(uploadsDir, "covers");
   const audioDir = path.join(uploadsDir, "audio");
   const now = Date.now();
-  const audioEnabled = hasElevenLabsKey();
+  const audioEnabled = hasElevenLabsKey() && payload.generateAudio !== false;
 
   // total_steps = 1 (story) + pageCount (illustrations) + 1 (cover) + 1 (audio, if enabled)
   const totalSteps = pageCount + 2 + (audioEnabled ? 1 : 0);
