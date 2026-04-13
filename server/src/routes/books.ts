@@ -398,7 +398,8 @@ router.get("/audio/:audioId", (req: Request, res: Response) => {
 
 // Serve an upload file by relative path (for debug page image display)
 router.get("/uploads/{*filepath}", (req: Request, res: Response) => {
-  const relativePath = (req.params as any).filepath;
+  const segments: string[] = (req.params as any).filepath;
+  const relativePath = Array.isArray(segments) ? segments.join("/") : segments;
   if (!relativePath || relativePath.includes("..")) {
     res.status(400).json({ error: "Invalid path" });
     return;
