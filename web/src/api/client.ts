@@ -160,6 +160,7 @@ export const startGeneration = (data: {
   storyModel?: string;
   illustrationModel?: string;
   coverModel?: string;
+  generateAudio?: boolean;
 }) =>
   request<{ jobId: string; bookId: string }>("/generate/book", {
     method: "POST",
@@ -204,6 +205,7 @@ export interface GenerationParams {
   storyModel: string | null;
   illustrationModel: string | null;
   coverModel: string | null;
+  generateAudio?: boolean;
 }
 
 export const getBookGenerationParams = (bookId: string) =>

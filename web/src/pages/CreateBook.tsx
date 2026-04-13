@@ -40,6 +40,9 @@ export function CreateBook() {
   const [loading, setLoading] = useState(true);
   const [variationTitle, setVariationTitle] = useState<string | null>(null);
 
+  // Audio toggle
+  const [generateAudio, setGenerateAudio] = useState(true);
+
   // Model settings
   const [modelLists, setModelLists] = useState<ModelLists | null>(null);
   const [showModelSettings, setShowModelSettings] = useState(false);
@@ -89,6 +92,7 @@ export function CreateBook() {
       if (params.storyModel) setStoryModel(params.storyModel);
       if (params.illustrationModel) setIllustrationModel(params.illustrationModel);
       if (params.coverModel) setCoverModel(params.coverModel);
+      if (params.generateAudio !== undefined) setGenerateAudio(params.generateAudio);
     }).catch(console.error);
   }, [fromBookId]);
 
@@ -214,6 +218,7 @@ export function CreateBook() {
         characterIds: Array.from(selectedIds),
         locationIds: Array.from(selectedLocationIds),
         elementPhotoPaths,
+        generateAudio,
         ...modelOverrides,
       });
       startPolling(result.jobId, result.bookId);
@@ -379,6 +384,20 @@ export function CreateBook() {
                 </PhotoSourcePicker>
               )}
             </div>
+          </div>
+
+          {/* Audio Toggle */}
+          <div className="form-group">
+            <label
+              className="toggle-row"
+              onClick={() => setGenerateAudio(!generateAudio)}
+            >
+              <span>🔊 Generate Audio</span>
+              <span className={`toggle-switch ${generateAudio ? "on" : ""}`}>
+                <span className="toggle-knob" />
+              </span>
+            </label>
+            <p className="form-hint">Generate ambient sounds and sound effects for each page</p>
           </div>
 
           {/* Model Settings */}
