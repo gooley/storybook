@@ -514,11 +514,17 @@ function pickNarrativeStyle(): (typeof NARRATIVE_STYLES)[number] {
 export async function generateStory(
   description: string,
   pageCount: number,
+  characters: CharacterRef[],
+  locations: LocationRef[],
+  elementPhotoPaths: string[],
   model?: string,
   trace?: TraceMetadata
 ): Promise<GenerationResult<StoryResponse>> {
   const useModel = model || DEFAULT_STORY_MODEL;
+  const uploadsDir = getUploadsDir();
   const style = pickNarrativeStyle();
+  let numImagesAttached = 0;
+  const inputImagePaths: string[] = [];
 
   const systemPrompt = `You are a talented children's storybook author with a distinctive voice. Write a short, engaging story for young children (ages 3-7).
 
@@ -531,6 +537,7 @@ Rules:
 - The story should have a clear beginning, middle, and end
 - Include descriptive scenes that would make good illustrations
 - Do NOT describe characters' physical appearances in the text (e.g. don't say "Dana, a 3 year old with curly blonde hair"). The reader already knows the characters — just use their names naturally.
+- If reference photos are attached, use them to understand what the locations and elements look like. Let this inform the story — incorporate real details about the settings and objects you can see in the photos. Do NOT describe characters' physical appearances even if you can see them in the photos; just use their names naturally.
 
 Variety and freshness:
 - Avoid overused children's book clichés. In particular, do NOT use "giggled", "tummy", or "magical" — find fresher alternatives.
@@ -544,15 +551,118 @@ Example: {"title": "The Brave Little Fox", "pages": [{"pageNumber": 1, "text": "
 
 Return ONLY the JSON object, no other text.`;
 
-  const userPrompt = `Write a children's story based on this idea: ${description}`;
+  let userPrompt = `Write a children's story based on this idea: ${description}`;
+
+  // Build reference image context for the prompt
+  let refPhotoCount = 0;
+  const hasCharacterPhotos = characters.some(
+    (c) => c.photoPath && fs.existsSync(path.join(uploadsDir, c.photoPath))
+  );
+  const hasLocationPhotos = locations.some((loc) =>
+    loc.photoPaths.some((p) => fs.existsSync(path.join(uploadsDir, p)))
+  );
+  const validElementPaths = (Array.isArray(elementPhotoPaths) ? elementPhotoPaths : [])
+    .filter((p: string) => typeof p === "string" && !p.includes(".."))
+    .filter((p: string) => fs.existsSync(path.join(uploadsDir, p)));
+
+  if (hasCharacterPhotos || hasLocationPhotos || validElementPaths.length > 0) {
+    userPrompt += `\n\nReference photos attached:`;
+    if (hasCharacterPhotos) {
+      userPrompt += `\nCharacter photos —`;
+      for (const c of characters) {
+        if (c.photoPath && fs.existsSync(path.join(uploadsDir, c.photoPath))) {
+          refPhotoCount++;
+          userPrompt += ` ${c.name} [photo ${refPhotoCount}],`;
+        }
+      }
+      userPrompt = userPrompt.replace(/,$/, "");
+    }
+    if (hasLocationPhotos) {
+      userPrompt += `\nLocation photos —`;
+      for (const loc of locations) {
+        const existingPhotos = loc.photoPaths.filter((p) =>
+          fs.existsSync(path.join(uploadsDir, p))
+        );
+        if (existingPhotos.length > 0) {
+          const refs = existingPhotos.map(() => {
+            refPhotoCount++;
+            return `photo ${refPhotoCount}`;
+          });
+          userPrompt += ` ${loc.name} [${refs.join(", ")}],`;
+        }
+      }
+      userPrompt = userPrompt.replace(/,$/, "");
+    }
+    if (validElementPaths.length > 0) {
+      const refs = validElementPaths.map(() => {
+        refPhotoCount++;
+        return `photo ${refPhotoCount}`;
+      });
+      userPrompt += `\nElement/item photos — ${refs.join(", ")}`;
+    }
+    userPrompt += `\n\nUse these reference images to understand the real-world context and let the visual details inspire the story.`;
+  }
+
+  const characterRefsJson =
+    characters.length > 0
+      ? JSON.stringify(
+          characters.map((c) => ({ name: c.name, description: c.description }))
+        )
+      : null;
+
   const startTime = Date.now();
 
   try {
+    // Build multimodal content with reference photos
+    const parts: Record<string, any>[] = [];
+
+    for (const c of characters) {
+      if (c.photoPath) {
+        const fullPath = path.join(uploadsDir, c.photoPath);
+        if (fs.existsSync(fullPath)) {
+          const scaled = await scalePhoto(fullPath);
+          parts.push(fileToBase64Part(scaled, "image/jpeg"));
+          numImagesAttached++;
+          inputImagePaths.push(c.photoPath);
+        }
+      }
+    }
+
+    for (const loc of locations) {
+      for (const photoPath of loc.photoPaths) {
+        const fullPath = path.join(uploadsDir, photoPath);
+        if (fs.existsSync(fullPath)) {
+          const scaled = await scalePhoto(fullPath);
+          parts.push(fileToBase64Part(scaled, "image/jpeg"));
+          numImagesAttached++;
+          inputImagePaths.push(photoPath);
+        }
+      }
+    }
+
+    for (const elemPath of validElementPaths) {
+      const fullPath = path.join(uploadsDir, elemPath);
+      if (fs.existsSync(fullPath)) {
+        const scaled = await scalePhoto(fullPath);
+        parts.push(fileToBase64Part(scaled, "image/jpeg"));
+        numImagesAttached++;
+        inputImagePaths.push(elemPath);
+      }
+    }
+
+    parts.push({ type: "text", text: userPrompt });
+
+    // Use multimodal user message if we have images, otherwise plain text
+    const userMessage =
+      numImagesAttached > 0
+        ? { role: "user", content: parts }
+        : { role: "user", content: userPrompt };
+
     const response = await makeRequest({
       model: useModel,
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
+        userMessage,
       ],
       temperature: 1.0,
       trace,
@@ -570,10 +680,10 @@ Return ONLY the JSON object, no other text.`;
       systemPrompt,
       responseText: content,
       responseModel: extractResponseModel(response),
-      numImagesAttached: 0,
-      hadReferenceImage: false,
-      characterRefsJson: null,
-      inputImagePaths: [],
+      numImagesAttached,
+      hadReferenceImage: numImagesAttached > 0,
+      characterRefsJson,
+      inputImagePaths,
       outputImagePath: null,
       success: true,
       errorMessage: null,
@@ -587,10 +697,10 @@ Return ONLY the JSON object, no other text.`;
         systemPrompt,
         responseText: null,
         responseModel: null,
-        numImagesAttached: 0,
-        hadReferenceImage: false,
-        characterRefsJson: null,
-        inputImagePaths: [],
+        numImagesAttached,
+        hadReferenceImage: numImagesAttached > 0,
+        characterRefsJson,
+        inputImagePaths,
         outputImagePath: null,
         success: false,
         errorMessage: e.message || "Unknown error",
