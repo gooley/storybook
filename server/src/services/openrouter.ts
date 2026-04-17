@@ -537,7 +537,7 @@ Rules:
 - The story should have a clear beginning, middle, and end
 - Include descriptive scenes that would make good illustrations
 - Do NOT describe characters' physical appearances in the text (e.g. don't say "Dana, a 3 year old with curly blonde hair"). The reader already knows the characters — just use their names naturally.
-- If reference photos are attached, use them to understand what the characters, locations, and elements actually look like. Let this inform the story — incorporate real details about the settings and elements you can see in the photos.
+- If reference photos are attached, use them to understand what the locations and elements look like. Let this inform the story — incorporate real details about the settings and objects you can see in the photos. Do NOT describe characters' physical appearances even if you can see them in the photos; just use their names naturally.
 
 Variety and freshness:
 - Avoid overused children's book clichés. In particular, do NOT use "giggled", "tummy", or "magical" — find fresher alternatives.
@@ -561,9 +561,9 @@ Return ONLY the JSON object, no other text.`;
   const hasLocationPhotos = locations.some((loc) =>
     loc.photoPaths.some((p) => fs.existsSync(path.join(uploadsDir, p)))
   );
-  const validElementPaths = elementPhotoPaths
-    .filter((p) => typeof p === "string" && !p.includes(".."))
-    .filter((p) => fs.existsSync(path.join(uploadsDir, p)));
+  const validElementPaths = (Array.isArray(elementPhotoPaths) ? elementPhotoPaths : [])
+    .filter((p: string) => typeof p === "string" && !p.includes(".."))
+    .filter((p: string) => fs.existsSync(path.join(uploadsDir, p)));
 
   if (hasCharacterPhotos || hasLocationPhotos || validElementPaths.length > 0) {
     userPrompt += `\n\nReference photos attached:`;
