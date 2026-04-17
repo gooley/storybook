@@ -283,12 +283,20 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
   const locations = loadLocationRefs(locationIds || []);
   const enrichedDescription = enrichDescription(description, characters, locations);
 
-  // Step 1: Generate story text
-  const storyResult = await generateStory(enrichedDescription, pageCount, storyModel, {
-    bookId,
-    stepType: "story",
-    totalPages: pageCount,
-  });
+  // Step 1: Generate story text (with reference images for context)
+  const storyResult = await generateStory(
+    enrichedDescription,
+    pageCount,
+    characters,
+    locations,
+    elementPhotoPaths || [],
+    storyModel,
+    {
+      bookId,
+      stepType: "story",
+      totalPages: pageCount,
+    }
+  );
   const story = storyResult.data;
 
   saveGenerationLog(storyResult, {
