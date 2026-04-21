@@ -232,6 +232,8 @@ router.get("/:id/generation-params", (req: Request, res: Response) => {
     illustrationModel: payload.illustrationModel || null,
     coverModel: payload.coverModel || null,
     generateAudio: payload.generateAudio !== false,
+    theme: payload.theme || null,
+    customTheme: payload.customTheme || null,
   });
 });
 
