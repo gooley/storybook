@@ -229,9 +229,29 @@ function loadLocationRefs(locationIds: string[]): LocationRef[] {
 function enrichDescription(
   description: string,
   characters: CharacterRef[],
-  locations: LocationRef[]
+  locations: LocationRef[],
+  theme?: string,
+  customTheme?: string
 ): string {
   let enriched = description;
+  if (theme && theme !== "none") {
+    const themeLabels: Record<string, string> = {
+      "making-a-friend": "Making a new friend",
+      "learning-something-new": "Learning to do something new",
+      "first-day-of-school": "First day of school",
+      "being-independent": "Learning to be independent",
+      "overcoming-fear": "Overcoming a fear",
+      "helping-others": "Helping others",
+      "sharing-and-kindness": "Sharing and kindness",
+      "big-adventure": "Going on a big adventure",
+      "believing-in-yourself": "Believing in yourself",
+      "trying-after-failing": "Trying again after failing",
+    };
+    const themeText = theme === "custom" ? customTheme : themeLabels[theme];
+    if (themeText) {
+      enriched += `\n\nStory theme: ${themeText}`;
+    }
+  }
   if (characters.length > 0) {
     enriched += "\n\nCharacters to feature in the story:\n";
     for (const c of characters) {
@@ -258,6 +278,8 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
   const storyModel: string | undefined = payload.storyModel;
   const illustrationModel: string | undefined = payload.illustrationModel;
   const coverModel: string | undefined = payload.coverModel;
+  const theme: string | undefined = payload.theme;
+  const customTheme: string | undefined = payload.customTheme;
   const uploadsDir = getUploadsDir();
   const illustrationsDir = path.join(uploadsDir, "illustrations");
   const coversDir = path.join(uploadsDir, "covers");
@@ -281,7 +303,7 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
   // Load characters and locations
   const characters = loadCharacterRefs(characterIds || []);
   const locations = loadLocationRefs(locationIds || []);
-  const enrichedDescription = enrichDescription(description, characters, locations);
+  const enrichedDescription = enrichDescription(description, characters, locations, theme, customTheme);
 
   // Step 1: Generate story text (with reference images for context)
   const storyResult = await generateStory(

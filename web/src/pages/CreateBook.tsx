@@ -24,6 +24,21 @@ const POLL_INTERVAL_FAST = 2000;
 const POLL_INTERVAL_SLOW = 5000;
 const SLOW_THRESHOLD_MS = 30000;
 
+const THEME_OPTIONS = [
+  { id: "none", label: "No theme" },
+  { id: "making-a-friend", label: "Making a new friend" },
+  { id: "learning-something-new", label: "Learning to do something new" },
+  { id: "first-day-of-school", label: "First day of school" },
+  { id: "being-independent", label: "Learning to be independent" },
+  { id: "overcoming-fear", label: "Overcoming a fear" },
+  { id: "helping-others", label: "Helping others" },
+  { id: "sharing-and-kindness", label: "Sharing and kindness" },
+  { id: "big-adventure", label: "Going on a big adventure" },
+  { id: "believing-in-yourself", label: "Believing in yourself" },
+  { id: "trying-after-failing", label: "Trying again after failing" },
+  { id: "custom", label: "Custom theme…" },
+];
+
 export function CreateBook() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -37,6 +52,8 @@ export function CreateBook() {
   const [selectedLocationIds, setSelectedLocationIds] = useState<Set<string>>(new Set());
   const [elementFiles, setElementFiles] = useState<File[]>([]);
   const [elementPreviews, setElementPreviews] = useState<string[]>([]);
+  const [theme, setTheme] = useState("none");
+  const [customTheme, setCustomTheme] = useState("");
   const [loading, setLoading] = useState(true);
   const [variationTitle, setVariationTitle] = useState<string | null>(null);
 
@@ -93,6 +110,8 @@ export function CreateBook() {
       if (params.illustrationModel) setIllustrationModel(params.illustrationModel);
       if (params.coverModel) setCoverModel(params.coverModel);
       if (params.generateAudio !== undefined) setGenerateAudio(params.generateAudio);
+      if (params.theme) setTheme(params.theme);
+      if (params.customTheme) setCustomTheme(params.customTheme);
     }).catch(console.error);
   }, [fromBookId]);
 
@@ -219,6 +238,8 @@ export function CreateBook() {
         locationIds: Array.from(selectedLocationIds),
         elementPhotoPaths,
         generateAudio,
+        theme: theme !== "none" ? theme : undefined,
+        customTheme: theme === "custom" ? customTheme.trim() : undefined,
         ...modelOverrides,
       });
       startPolling(result.jobId, result.bookId);
@@ -262,6 +283,31 @@ export function CreateBook() {
               rows={4}
               maxLength={2000}
             />
+          </div>
+
+          <div className="form-group">
+            <label>Theme</label>
+            <div className="theme-options">
+              {THEME_OPTIONS.map((t) => (
+                <button
+                  key={t.id}
+                  className={`theme-btn ${theme === t.id ? "active" : ""}`}
+                  onClick={() => setTheme(t.id)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {theme === "custom" && (
+              <input
+                type="text"
+                className="custom-theme-input"
+                value={customTheme}
+                onChange={(e) => setCustomTheme(e.target.value)}
+                placeholder="Describe your theme…"
+                maxLength={200}
+              />
+            )}
           </div>
 
           <div className="form-group">

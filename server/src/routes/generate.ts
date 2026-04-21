@@ -57,7 +57,7 @@ router.post(
 
 // POST /api/generate/book — Start a new book generation job
 router.post("/book", (req: Request, res: Response) => {
-  const { description, pageCount, characterIds, locationIds, elementPhotoPaths, bookId, storyModel, illustrationModel, coverModel, generateAudio } = req.body;
+  const { description, pageCount, characterIds, locationIds, elementPhotoPaths, bookId, storyModel, illustrationModel, coverModel, generateAudio, theme, customTheme } = req.body;
 
   // Validation
   if (!description || typeof description !== "string") {
@@ -176,6 +176,8 @@ router.post("/book", (req: Request, res: Response) => {
       ...(storyModel && { storyModel }),
       ...(illustrationModel && { illustrationModel }),
       ...(coverModel && { coverModel }),
+      ...(theme && { theme }),
+      ...(customTheme && { customTheme: String(customTheme).slice(0, 200) }),
     }),
     now,
     now

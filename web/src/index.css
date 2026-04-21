@@ -156,6 +156,19 @@ body {
 .page-count-btn:hover { border-color: var(--primary); color: var(--primary); }
 .page-count-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
 
+.theme-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.theme-btn {
+  padding: 6px 14px; border: 2px solid var(--border); border-radius: 20px;
+  background: var(--surface); cursor: pointer; font-size: 0.85rem; transition: all 0.15s;
+}
+.theme-btn:hover { border-color: var(--primary); color: var(--primary); }
+.theme-btn.active { background: var(--primary-light); border-color: var(--primary); color: var(--primary); font-weight: 500; }
+.custom-theme-input {
+  margin-top: 8px; width: 100%; padding: 8px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+
 .character-picker { display: flex; flex-direction: column; gap: 12px; }
 .character-group-label { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 .character-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
