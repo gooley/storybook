@@ -39,6 +39,109 @@ const THEME_OPTIONS = [
   { id: "custom", label: "Custom theme…" },
 ];
 
+const LEADING_ARTICLES = new Set(["a", "an", "the"]);
+
+type NamedEntity = {
+  id: string;
+  name: string;
+};
+
+function tokenizeForEntityMatch(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .match(/[a-z0-9]+/g) ?? [];
+}
+
+function stripLeadingArticles(words: string[]) {
+  let firstContentWord = 0;
+  while (firstContentWord < words.length && LEADING_ARTICLES.has(words[firstContentWord])) {
+    firstContentWord += 1;
+  }
+  return words.slice(firstContentWord);
+}
+
+function entityNameVariants(name: string) {
+  const words = tokenizeForEntityMatch(name);
+  const variants = [words, stripLeadingArticles(words)];
+  const seen = new Set<string>();
+
+  return variants.filter((variant) => {
+    if (variant.length === 0) return false;
+    const key = variant.join(" ");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function promptContainsEntity(promptWords: string[], entityWords: string[]) {
+  const spacedEntity = entityWords.join(" ");
+  const compactEntity = entityWords.join("");
+
+  for (let start = 0; start < promptWords.length; start += 1) {
+    const sameWordCount = promptWords.slice(start, start + entityWords.length);
+    if (sameWordCount.join(" ") === spacedEntity) return true;
+
+    let compactPrompt = "";
+    for (let end = start; end < promptWords.length; end += 1) {
+      compactPrompt += promptWords[end];
+      if (compactPrompt === compactEntity) return true;
+      if (compactPrompt.length >= compactEntity.length) break;
+    }
+  }
+
+  return false;
+}
+
+function getMatchingEntityIds(prompt: string, entities: NamedEntity[]) {
+  const promptWords = tokenizeForEntityMatch(prompt);
+  if (promptWords.length === 0) return [];
+
+  return entities
+    .filter((entity) =>
+      entityNameVariants(entity.name).some((variant) => promptContainsEntity(promptWords, variant))
+    )
+    .map((entity) => entity.id);
+}
+
+function addIdsToSelection(selectedIds: Set<string>, idsToAdd: string[]) {
+  let nextSelectedIds: Set<string> | null = null;
+  for (const id of idsToAdd) {
+    if (!selectedIds.has(id)) {
+      nextSelectedIds ??= new Set(selectedIds);
+      nextSelectedIds.add(id);
+    }
+  }
+  return nextSelectedIds ?? selectedIds;
+}
+
+function pruneDismissedIds(dismissedIds: Set<string>, matchingIds: string[]) {
+  const matchingIdSet = new Set(matchingIds);
+  for (const id of Array.from(dismissedIds)) {
+    if (!matchingIdSet.has(id)) dismissedIds.delete(id);
+  }
+}
+
+function excludeDismissedIds(matchingIds: string[], dismissedIds: Set<string>) {
+  return matchingIds.filter((id) => !dismissedIds.has(id));
+}
+
+function updateDismissedId(
+  dismissedIds: Set<string>,
+  prompt: string,
+  entity: NamedEntity | undefined,
+  wasSelected: boolean
+) {
+  if (!entity) return;
+  if (wasSelected && getMatchingEntityIds(prompt, [entity]).length > 0) {
+    dismissedIds.add(entity.id);
+  } else {
+    dismissedIds.delete(entity.id);
+  }
+}
+
 export function CreateBook() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -74,6 +177,8 @@ export function CreateBook() {
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
+  const dismissedCharacterIdsRef = useRef<Set<string>>(new Set());
+  const dismissedLocationIdsRef = useRef<Set<string>>(new Set());
 
   const loadCharacters = useCallback(async () => {
     try {
@@ -122,7 +227,36 @@ export function CreateBook() {
     };
   }, [loadCharacters]);
 
+  useEffect(() => {
+    const matchingCharacterIds = getMatchingEntityIds(description, characters);
+    const matchingLocationIds = getMatchingEntityIds(description, locations);
+    pruneDismissedIds(dismissedCharacterIdsRef.current, matchingCharacterIds);
+    pruneDismissedIds(dismissedLocationIdsRef.current, matchingLocationIds);
+
+    const selectableCharacterIds = excludeDismissedIds(
+      matchingCharacterIds,
+      dismissedCharacterIdsRef.current
+    );
+    const selectableLocationIds = excludeDismissedIds(
+      matchingLocationIds,
+      dismissedLocationIdsRef.current
+    );
+
+    if (selectableCharacterIds.length > 0) {
+      setSelectedIds((prev) => addIdsToSelection(prev, selectableCharacterIds));
+    }
+    if (selectableLocationIds.length > 0) {
+      setSelectedLocationIds((prev) => addIdsToSelection(prev, selectableLocationIds));
+    }
+  }, [description, characters, locations]);
+
   const toggleCharacter = (id: string) => {
+    updateDismissedId(
+      dismissedCharacterIdsRef.current,
+      description,
+      characters.find((c) => c.id === id),
+      selectedIds.has(id)
+    );
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -132,6 +266,12 @@ export function CreateBook() {
   };
 
   const toggleLocation = (id: string) => {
+    updateDismissedId(
+      dismissedLocationIdsRef.current,
+      description,
+      locations.find((loc) => loc.id === id),
+      selectedLocationIds.has(id)
+    );
     setSelectedLocationIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
