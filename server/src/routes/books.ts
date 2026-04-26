@@ -234,6 +234,7 @@ router.get("/:id/generation-params", (req: Request, res: Response) => {
     generateAudio: payload.generateAudio !== false,
     theme: payload.theme || null,
     customTheme: payload.customTheme || null,
+    illustrationStyle: payload.illustrationStyle || null,
   });
 });
 

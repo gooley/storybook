@@ -9,6 +9,7 @@ import {
   getActiveJobs,
   GenerationJob,
 } from "../services/generation";
+import { resolveIllustrationStyle } from "../services/openrouter";
 
 const router = Router();
 
@@ -57,7 +58,7 @@ router.post(
 
 // POST /api/generate/book — Start a new book generation job
 router.post("/book", (req: Request, res: Response) => {
-  const { description, pageCount, characterIds, locationIds, elementPhotoPaths, bookId, storyModel, illustrationModel, coverModel, generateAudio, theme, customTheme } = req.body;
+  const { description, pageCount, characterIds, locationIds, elementPhotoPaths, bookId, storyModel, illustrationModel, coverModel, generateAudio, theme, customTheme, illustrationStyle } = req.body;
 
   // Validation
   if (!description || typeof description !== "string") {
@@ -75,6 +76,13 @@ router.post("/book", (req: Request, res: Response) => {
   }
   if (locationIds && !Array.isArray(locationIds)) {
     res.status(400).json({ error: "locationIds must be an array" });
+    return;
+  }
+  let sanitizedIllustrationStyle: string;
+  try {
+    sanitizedIllustrationStyle = resolveIllustrationStyle(illustrationStyle);
+  } catch {
+    res.status(400).json({ error: "Invalid illustrationStyle" });
     return;
   }
 
@@ -173,6 +181,7 @@ router.post("/book", (req: Request, res: Response) => {
       elementPhotoPaths: sanitizedElementPaths,
       bookId: resolvedBookId,
       generateAudio: generateAudio !== false,
+      illustrationStyle: sanitizedIllustrationStyle,
       ...(storyModel && { storyModel }),
       ...(illustrationModel && { illustrationModel }),
       ...(coverModel && { coverModel }),

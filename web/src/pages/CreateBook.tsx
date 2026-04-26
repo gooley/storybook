@@ -39,6 +39,56 @@ const THEME_OPTIONS = [
   { id: "custom", label: "Custom theme…" },
 ];
 
+const DEFAULT_ILLUSTRATION_STYLE = "bold-storybook-ink";
+
+const ILLUSTRATION_STYLE_OPTIONS = [
+  {
+    id: DEFAULT_ILLUSTRATION_STYLE,
+    label: "Bold Storybook Ink",
+    description: "Bold outlines, simple shapes, bright picture-book color.",
+  },
+  {
+    id: "soft-watercolor",
+    label: "Soft Watercolor",
+    description: "Gentle washes, soft edges, cozy warm light.",
+  },
+  {
+    id: "gouache-picture-book",
+    label: "Gouache Picture Book",
+    description: "Matte paint, rich color, playful brush texture.",
+  },
+  {
+    id: "paper-cutout-collage",
+    label: "Paper Cutout Collage",
+    description: "Layered paper shapes with handmade texture.",
+  },
+  {
+    id: "colored-pencil-sketch",
+    label: "Colored Pencil Sketch",
+    description: "Crayon texture, hand-drawn lines, childlike charm.",
+  },
+  {
+    id: "modern-flat-shapes",
+    label: "Modern Flat Shapes",
+    description: "Clean geometric forms and bold readable color blocks.",
+  },
+  {
+    id: "vintage-print",
+    label: "Vintage Print",
+    description: "Limited palette, print texture, nostalgic warmth.",
+  },
+  {
+    id: "cozy-comic",
+    label: "Cozy Comic",
+    description: "Expressive cartoon faces and clear cinematic scenes.",
+  },
+  {
+    id: "surprise-me",
+    label: "Surprise me",
+    description: "Pick one of these styles for this book.",
+  },
+];
+
 const LEADING_ARTICLES = new Set(["a", "an", "the"]);
 
 type NamedEntity = {
@@ -157,6 +207,7 @@ export function CreateBook() {
   const [elementPreviews, setElementPreviews] = useState<string[]>([]);
   const [theme, setTheme] = useState("none");
   const [customTheme, setCustomTheme] = useState("");
+  const [illustrationStyle, setIllustrationStyle] = useState(DEFAULT_ILLUSTRATION_STYLE);
   const [loading, setLoading] = useState(true);
   const [variationTitle, setVariationTitle] = useState<string | null>(null);
 
@@ -217,6 +268,7 @@ export function CreateBook() {
       if (params.generateAudio !== undefined) setGenerateAudio(params.generateAudio);
       if (params.theme) setTheme(params.theme);
       if (params.customTheme) setCustomTheme(params.customTheme);
+      if (params.illustrationStyle) setIllustrationStyle(params.illustrationStyle);
     }).catch(console.error);
   }, [fromBookId]);
 
@@ -380,6 +432,7 @@ export function CreateBook() {
         generateAudio,
         theme: theme !== "none" ? theme : undefined,
         customTheme: theme === "custom" ? customTheme.trim() : undefined,
+        illustrationStyle,
         ...modelOverrides,
       });
       startPolling(result.jobId, result.bookId);
@@ -448,6 +501,23 @@ export function CreateBook() {
                 maxLength={200}
               />
             )}
+          </div>
+
+          <div className="form-group">
+            <label>Illustration style</label>
+            <div className="illustration-style-options">
+              {ILLUSTRATION_STYLE_OPTIONS.map((style) => (
+                <button
+                  key={style.id}
+                  className={`illustration-style-btn ${illustrationStyle === style.id ? "active" : ""}`}
+                  onClick={() => setIllustrationStyle(style.id)}
+                  type="button"
+                >
+                  <span className="illustration-style-label">{style.label}</span>
+                  <span className="illustration-style-description">{style.description}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="form-group">
