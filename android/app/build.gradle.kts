@@ -14,6 +14,16 @@ if (localPropsFile.exists()) {
     localPropsFile.inputStream().use { localProperties.load(it) }
 }
 
+val releaseSigningKeystorePath = System.getenv("ANDROID_SIGNING_KEYSTORE_PATH") ?: ""
+val releaseSigningStorePassword = System.getenv("ANDROID_SIGNING_STORE_PASSWORD") ?: ""
+val releaseSigningKeyAlias = System.getenv("ANDROID_SIGNING_KEY_ALIAS") ?: ""
+val releaseSigningKeyPassword = System.getenv("ANDROID_SIGNING_KEY_PASSWORD") ?: ""
+val hasReleaseSigningConfig =
+    releaseSigningKeystorePath.isNotBlank() &&
+        releaseSigningStorePassword.isNotBlank() &&
+        releaseSigningKeyAlias.isNotBlank() &&
+        releaseSigningKeyPassword.isNotBlank()
+
 android {
     namespace = "com.gooley.storybook"
     compileSdk = 35
@@ -39,9 +49,23 @@ android {
         )
     }
 
+    signingConfigs {
+        if (hasReleaseSigningConfig) {
+            create("release") {
+                storeFile = file(releaseSigningKeystorePath)
+                storePassword = releaseSigningStorePassword
+                keyAlias = releaseSigningKeyAlias
+                keyPassword = releaseSigningKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (hasReleaseSigningConfig) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

@@ -31,18 +31,67 @@ jobs:
       - name: Create local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > local.properties
 
+      - name: Decode release keystore
+        env:
+          ANDROID_SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$ANDROID_SIGNING_KEYSTORE_BASE64" ]; then
+            echo "::error::ANDROID_SIGNING_KEYSTORE_BASE64 secret is required to build a signed release APK"
+            exit 1
+          fi
+
+          printf '%s' "$ANDROID_SIGNING_KEYSTORE_BASE64" | base64 --decode > app/release-keystore.jks
+
       - name: Set version
         run: |
           sed -i "s/versionCode = .*/versionCode = ${{ inputs.version_code }}/" app/build.gradle.kts
           sed -i "s/versionName = .*/versionName = \"${{ inputs.version_name }}\"/" app/build.gradle.kts
 
-      - name: Build release APK
-        run: ./gradlew assembleRelease --no-daemon
+      - name: Build signed release APK
+        env:
+          ANDROID_SIGNING_KEYSTORE_PATH: ${{ github.workspace }}/android/app/release-keystore.jks
+          ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+          ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+          ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$ANDROID_SIGNING_STORE_PASSWORD" ]; then
+            echo "::error::ANDROID_SIGNING_STORE_PASSWORD secret is required to build a signed release APK"
+            exit 1
+          fi
+
+          if [ -z "$ANDROID_SIGNING_KEY_ALIAS" ]; then
+            echo "::error::ANDROID_SIGNING_KEY_ALIAS secret is required to build a signed release APK"
+            exit 1
+          fi
+
+          if [ -z "$ANDROID_SIGNING_KEY_PASSWORD" ]; then
+            echo "::error::ANDROID_SIGNING_KEY_PASSWORD secret is required to build a signed release APK"
+            exit 1
+          fi
+
+          ./gradlew assembleRelease --no-daemon
 
       - name: Rename APK
         run: |
-          mv app/build/outputs/apk/release/app-release-unsigned.apk \
+          mv app/build/outputs/apk/release/app-release.apk \
              app/build/outputs/apk/release/storybook-v${{ inputs.version_name }}.apk
+
+      - name: Verify APK signature
+        run: |
+          set -euo pipefail
+
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner was not found in the Android SDK build-tools"
+            exit 1
+          fi
+
+          "$APKSIGNER" verify --verbose --print-certs \
+            app/build/outputs/apk/release/storybook-v${{ inputs.version_name }}.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
