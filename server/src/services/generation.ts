@@ -522,6 +522,7 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
   const coverModel: string | undefined = payload.coverModel;
   const theme: string | undefined = payload.theme;
   const customTheme: string | undefined = payload.customTheme;
+  const illustrationStyle: string | undefined = payload.illustrationStyle;
   const uploadsDir = getUploadsDir();
   const illustrationsDir = path.join(uploadsDir, "illustrations");
   const coversDir = path.join(uploadsDir, "covers");
@@ -657,6 +658,7 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
       illustrationModel,
       visualDirections[i] || undefined,
       elementPhotoPaths || [],
+      illustrationStyle,
       {
         bookId,
         stepType: "illustration",
@@ -704,6 +706,7 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
     firstImagePath,
     coverPath,
     coverModel,
+    illustrationStyle,
     {
       bookId,
       stepType: "cover",
@@ -854,6 +857,7 @@ async function executeRegenerateIllustrations(
       undefined,
       undefined,
       undefined,
+      undefined,
       {
         bookId,
         stepType: "illustration",
@@ -961,10 +965,17 @@ async function executeRegenerateCovers(job: GenerationJob): Promise<void> {
       }
 
       const coverPath = path.join(coversDir, `${book.id}.png`);
-      const coverResult = await generateCover(book.title, firstPageImagePath, coverPath, undefined, {
-        bookId: book.id,
-        stepType: "cover",
-      });
+      const coverResult = await generateCover(
+        book.title,
+        firstPageImagePath,
+        coverPath,
+        undefined,
+        undefined,
+        {
+          bookId: book.id,
+          stepType: "cover",
+        }
+      );
       const success = coverResult.data;
 
       saveGenerationLog(coverResult, {

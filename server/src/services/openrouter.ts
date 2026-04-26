@@ -11,6 +11,81 @@ export const DEFAULT_STORY_MODEL = "anthropic/claude-sonnet-4.6";
 export const DEFAULT_ILLUSTRATION_MODEL = "google/gemini-3.1-flash-image-preview";
 export const DEFAULT_COVER_MODEL = "bytedance-seed/seedream-4.5";
 
+export const DEFAULT_ILLUSTRATION_STYLE = "bold-storybook-ink";
+
+export const ILLUSTRATION_STYLES = [
+  {
+    id: "bold-storybook-ink",
+    label: "Bold Storybook Ink",
+    prompt: "Sharp pen and ink illustration with bold outlines, simple shapes, and a bright picture-book look.",
+  },
+  {
+    id: "soft-watercolor",
+    label: "Soft Watercolor",
+    prompt: "Gentle watercolor washes with soft edges, warm light, airy backgrounds, and a cozy picture-book feel.",
+  },
+  {
+    id: "gouache-picture-book",
+    label: "Gouache Picture Book",
+    prompt: "Opaque painted gouache with rich matte colors, visible brush texture, and playful simplified forms.",
+  },
+  {
+    id: "paper-cutout-collage",
+    label: "Paper Cutout Collage",
+    prompt: "Layered cut-paper collage with handmade paper texture, clear silhouettes, and cheerful playful composition.",
+  },
+  {
+    id: "colored-pencil-sketch",
+    label: "Colored Pencil Sketch",
+    prompt: "Colored pencil and crayon texture with soft hand-drawn lines and warm imperfect childlike charm.",
+  },
+  {
+    id: "modern-flat-shapes",
+    label: "Modern Flat Shapes",
+    prompt: "Clean geometric shapes, minimal detail, bold color blocks, and high readability for small screens.",
+  },
+  {
+    id: "vintage-print",
+    label: "Vintage Print",
+    prompt: "Screen-print inspired texture with a limited palette, slightly offset ink, and nostalgic storybook warmth.",
+  },
+  {
+    id: "cozy-comic",
+    label: "Cozy Comic",
+    prompt: "Expressive cartoon characters with clear facial emotions, bold outlines, and simple cinematic scenes.",
+  },
+] as const;
+
+type IllustrationStyleId = (typeof ILLUSTRATION_STYLES)[number]["id"];
+
+const ILLUSTRATION_STYLE_IDS = new Set<string>(
+  ILLUSTRATION_STYLES.map((style) => style.id)
+);
+
+export function resolveIllustrationStyle(styleId: unknown): IllustrationStyleId {
+  if (styleId == null || styleId === "") {
+    return DEFAULT_ILLUSTRATION_STYLE;
+  }
+
+  if (styleId === "surprise-me") {
+    const index = Math.floor(Math.random() * ILLUSTRATION_STYLES.length);
+    return ILLUSTRATION_STYLES[index].id;
+  }
+
+  if (typeof styleId === "string" && ILLUSTRATION_STYLE_IDS.has(styleId)) {
+    return styleId as IllustrationStyleId;
+  }
+
+  throw new Error("Invalid illustration style");
+}
+
+function getIllustrationStyle(styleId: string | undefined) {
+  return (
+    ILLUSTRATION_STYLES.find((style) => style.id === styleId) ??
+    ILLUSTRATION_STYLES[0]
+  );
+}
+
 export interface CharacterRef {
   name: string;
   description: string;
@@ -793,9 +868,11 @@ export async function generateIllustration(
   model?: string,
   visualDirection?: string,
   elementPhotoPaths?: string[],
+  illustrationStyle?: string,
   trace?: TraceMetadata
 ): Promise<GenerationResult<boolean>> {
   const useModel = model || DEFAULT_ILLUSTRATION_MODEL;
+  const style = getIllustrationStyle(illustrationStyle);
   const uploadsDir = getUploadsDir();
   const startTime = Date.now();
   let numImagesAttached = 0;
@@ -880,8 +957,8 @@ export async function generateIllustration(
     prompt += `${visualDirection}\n\n`;
   }
 
-  prompt += `Style: Sharp pen and ink illustration with bold lines. `;
-  prompt += `Use a limited palette of 6 highly saturated colors suitable for a color e-ink display. `;
+  prompt += `Illustration style: ${style.label}. ${style.prompt} `;
+  prompt += `Use a limited, high-contrast palette suitable for a color e-ink display. `;
   prompt += `The illustration should be simple, clear, and appealing to young children.\n\n`;
   prompt += `IMPORTANT: The image must be horizontal/landscape orientation.\n\n`;
   prompt += `IMPORTANT: Do NOT include any text, words, letters, numbers, captions, titles, labels, or writing of any kind in the image. The image must contain only visual artwork with zero text.`;
@@ -1039,15 +1116,18 @@ export async function generateCover(
   firstPageImagePath: string,
   outputPath: string,
   model?: string,
+  illustrationStyle?: string,
   trace?: TraceMetadata
 ): Promise<GenerationResult<boolean>> {
   const useModel = model || DEFAULT_COVER_MODEL;
+  const style = getIllustrationStyle(illustrationStyle);
   const uploadsDir = getUploadsDir();
   const startTime = Date.now();
   const prompt =
     `Use this image as the basis for generating a book cover ` +
     `with the title "${title}". You have artistic license to be ` +
     `creative with typography but keep the same basic content concepts. ` +
+    `Match this book's illustration style: ${style.label}. ${style.prompt} ` +
     `Ratio should be 3:2 portrait orientation.`;
 
   let numImagesAttached = 0;
