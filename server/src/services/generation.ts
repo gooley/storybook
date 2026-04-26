@@ -56,6 +56,248 @@ function saveGenerationLog(
   );
 }
 
+type AudioType = "ambient" | "sfx";
+
+interface AudioPageEntry {
+  id: string;
+  pageId: string;
+  audioType: AudioType;
+  description: string;
+  durationHint: number;
+  sortOrder: number;
+  generationKey: string;
+}
+
+interface AudioClipJob {
+  generationKey: string;
+  primaryAudioId: string;
+  primaryPageId: string;
+  audioType: AudioType;
+  description: string;
+  durationHint: number;
+  rowIds: string[];
+}
+
+const MAX_AMBIENT_TRACKS_PER_STORY = 2;
+const MAX_SFX_PER_STORY = 2;
+const AMBIENT_DURATION_SECONDS = 30;
+const MIN_SFX_DURATION_SECONDS = 4;
+const MAX_SFX_DURATION_SECONDS = 12;
+
+function normalizeAudioPrompt(prompt: string): string {
+  return prompt
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function clampSfxDuration(value: number): number {
+  if (!Number.isFinite(value)) return 6;
+  return Math.max(MIN_SFX_DURATION_SECONDS, Math.min(MAX_SFX_DURATION_SECONDS, value));
+}
+
+function buildCappedAudioPlan(
+  pageIds: string[],
+  pageDesigns: PageDesign[]
+): { pageEntries: AudioPageEntry[]; clipJobs: AudioClipJob[] } {
+  const pageEntries: AudioPageEntry[] = [];
+  const clipJobs = new Map<string, AudioClipJob>();
+  const ambientTracks = new Map<
+    string,
+    { description: string; generationKey: string }
+  >();
+  const ambientTrackKeys: string[] = [];
+  let sfxCount = 0;
+
+  const addEntry = (entry: AudioPageEntry) => {
+    pageEntries.push(entry);
+    const existing = clipJobs.get(entry.generationKey);
+    if (existing) {
+      existing.rowIds.push(entry.id);
+      return;
+    }
+    clipJobs.set(entry.generationKey, {
+      generationKey: entry.generationKey,
+      primaryAudioId: entry.id,
+      primaryPageId: entry.pageId,
+      audioType: entry.audioType,
+      description: entry.description,
+      durationHint: entry.durationHint,
+      rowIds: [entry.id],
+    });
+  };
+
+  for (let i = 0; i < pageIds.length; i++) {
+    const design = pageDesigns[i];
+    if (!design) continue;
+
+    const pageId = pageIds[i];
+    const ambientDescription = design.ambient.trim();
+    if (ambientDescription) {
+      const normalized = normalizeAudioPrompt(ambientDescription);
+      let ambientTrack = ambientTracks.get(normalized);
+      if (!ambientTrack && ambientTrackKeys.length < MAX_AMBIENT_TRACKS_PER_STORY) {
+        ambientTrack = {
+          description: ambientDescription,
+          generationKey: `ambient:${ambientTrackKeys.length + 1}`,
+        };
+        ambientTracks.set(normalized, ambientTrack);
+        ambientTrackKeys.push(normalized);
+      } else if (!ambientTrack) {
+        const fallbackKey = ambientTrackKeys[ambientTrackKeys.length - 1];
+        ambientTrack = fallbackKey ? ambientTracks.get(fallbackKey) : undefined;
+      }
+
+      if (ambientTrack) {
+        addEntry({
+          id: nanoid(),
+          pageId,
+          audioType: "ambient",
+          description: ambientTrack.description,
+          durationHint: AMBIENT_DURATION_SECONDS,
+          sortOrder: 0,
+          generationKey: ambientTrack.generationKey,
+        });
+      }
+    }
+
+    if (sfxCount >= MAX_SFX_PER_STORY || !Array.isArray(design.sfx)) {
+      continue;
+    }
+
+    for (let s = 0; s < design.sfx.length && sfxCount < MAX_SFX_PER_STORY; s++) {
+      const sfx = design.sfx[s];
+      const description = sfx.description.trim();
+      if (!description) continue;
+      const id = nanoid();
+      addEntry({
+        id,
+        pageId,
+        audioType: "sfx",
+        description,
+        durationHint: clampSfxDuration(sfx.durationHint),
+        sortOrder: s + 1,
+        generationKey: `sfx:${id}`,
+      });
+      sfxCount++;
+    }
+  }
+
+  return { pageEntries, clipJobs: Array.from(clipJobs.values()) };
+}
+
+function insertAudioRows(pageEntries: AudioPageEntry[]) {
+  const insertAudio = db.prepare(
+    `INSERT INTO page_audio (id, page_id, audio_type, description, sort_order, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`
+  );
+  const audioNow = Date.now();
+  for (const entry of pageEntries) {
+    insertAudio.run(
+      entry.id,
+      entry.pageId,
+      entry.audioType,
+      entry.description,
+      entry.sortOrder,
+      audioNow,
+      audioNow
+    );
+  }
+}
+
+async function generateAudioClipJobs(
+  job: GenerationJob,
+  bookId: string,
+  audioDir: string,
+  clipJobs: AudioClipJob[]
+) {
+  const updateGenerating = db.prepare(
+    "UPDATE page_audio SET status = 'generating', updated_at = ? WHERE id = ?"
+  );
+  const updateDone = db.prepare(
+    "UPDATE page_audio SET audio_path = ?, duration_seconds = ?, status = 'done', updated_at = ? WHERE id = ?"
+  );
+  const updateError = db.prepare(
+    "UPDATE page_audio SET status = 'error', updated_at = ? WHERE id = ?"
+  );
+  const audioLimit = pLimit(4);
+  const audioPromises = clipJobs.map((clipJob) =>
+    audioLimit(async () => {
+      if (isJobCancelled(job.id)) return;
+
+      const startedAt = Date.now();
+      for (const rowId of clipJob.rowIds) {
+        updateGenerating.run(startedAt, rowId);
+      }
+
+      const outputPath = path.join(audioDir, `${clipJob.primaryAudioId}.mp3`);
+      const isAmbient = clipJob.audioType === "ambient";
+      const audioStart = Date.now();
+      const result = await generateSoundEffect(clipJob.description, outputPath, {
+        looping: isAmbient,
+        durationSeconds: isAmbient ? AMBIENT_DURATION_SECONDS : clipJob.durationHint,
+        promptInfluence: isAmbient ? 0.5 : 0.7,
+      });
+      const audioDuration = Date.now() - audioStart;
+
+      saveGenerationLog(
+        {
+          model: "elevenlabs-sound-generation",
+          prompt: clipJob.description,
+          systemPrompt: null,
+          characterRefsJson: null,
+          numImagesAttached: 0,
+          hadReferenceImage: false,
+          responseText: result.success
+            ? `Generated ${clipJob.audioType} audio (${result.durationSeconds?.toFixed(1)}s)\naudio_id:${clipJob.primaryAudioId}`
+            : null,
+          responseModel: "elevenlabs-sound-generation",
+          inputImagePaths: [],
+          outputImagePath: null,
+          success: result.success,
+          errorMessage: result.error ?? null,
+          durationMs: audioDuration,
+        },
+        {
+          jobId: job.id,
+          bookId,
+          pageId: clipJob.primaryPageId,
+          stepType: "audio",
+        }
+      );
+
+      if (result.success) {
+        const sharedAudioPath = `audio/${clipJob.primaryAudioId}.mp3`;
+        const finishedAt = Date.now();
+        for (const rowId of clipJob.rowIds) {
+          updateDone.run(sharedAudioPath, result.durationSeconds, finishedAt, rowId);
+        }
+      } else {
+        console.error(`Audio generation failed for ${clipJob.primaryAudioId}: ${result.error}`);
+        const failedAt = Date.now();
+        for (const rowId of clipJob.rowIds) {
+          updateError.run(failedAt, rowId);
+        }
+      }
+    })
+  );
+
+  await Promise.all(audioPromises);
+}
+
+async function generateCappedAudioForDesigns(
+  job: GenerationJob,
+  bookId: string,
+  audioDir: string,
+  pageIds: string[],
+  pageDesigns: PageDesign[]
+) {
+  const { pageEntries, clipJobs } = buildCappedAudioPlan(pageIds, pageDesigns);
+  insertAudioRows(pageEntries);
+  await generateAudioClipJobs(job, bookId, audioDir, clipJobs);
+}
+
 // Concurrency controls
 const ILLUSTRATION_CONCURRENCY = 3;
 const MAX_CONCURRENT_JOBS = 2;
@@ -495,133 +737,10 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
 
     updateJobStatus(job.id, {
       status: "generating_audio",
-      progress_message: "Generating sound effects...",
+      progress_message: "Generating capped story audio...",
     });
 
-    // Create page_audio rows for all pages
-    const audioEntries: Array<{
-      id: string;
-      pageId: string;
-      audioType: "ambient" | "sfx";
-      description: string;
-      durationHint: number;
-      sortOrder: number;
-    }> = [];
-
-    for (let i = 0; i < pageIds.length; i++) {
-      const design = pageDesigns[i];
-      if (!design) continue;
-
-      // Ambient track
-      if (design.ambient) {
-        const audioId = nanoid();
-        audioEntries.push({
-          id: audioId,
-          pageId: pageIds[i],
-          audioType: "ambient",
-          description: design.ambient,
-          durationHint: 22,
-          sortOrder: 0,
-        });
-      }
-
-      // SFX tracks (limit to 1 per page)
-      if (design.sfx) {
-        const sfxList = design.sfx.slice(0, 1);
-        for (let s = 0; s < sfxList.length; s++) {
-          const sfx = sfxList[s];
-          const audioId = nanoid();
-          audioEntries.push({
-            id: audioId,
-            pageId: pageIds[i],
-            audioType: "sfx",
-            description: sfx.description,
-            durationHint: sfx.durationHint,
-            sortOrder: s + 1,
-          });
-        }
-      }
-    }
-
-    // Insert all page_audio rows as pending
-    const insertAudio = db.prepare(
-      `INSERT INTO page_audio (id, page_id, audio_type, description, sort_order, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`
-    );
-    const audioNow = Date.now();
-    for (const entry of audioEntries) {
-      insertAudio.run(
-        entry.id,
-        entry.pageId,
-        entry.audioType,
-        entry.description,
-        entry.sortOrder,
-        audioNow,
-        audioNow
-      );
-    }
-
-    // Generate all audio clips in parallel (limit concurrency)
-    const audioLimit = pLimit(4);
-    const audioPromises = audioEntries.map((entry) =>
-      audioLimit(async () => {
-        if (isJobCancelled(job.id)) return;
-
-        db.prepare(
-          "UPDATE page_audio SET status = 'generating', updated_at = ? WHERE id = ?"
-        ).run(Date.now(), entry.id);
-
-        const outputPath = path.join(audioDir, `${entry.id}.mp3`);
-        const isAmbient = entry.audioType === "ambient";
-
-        const audioStart = Date.now();
-        const result = await generateSoundEffect(entry.description, outputPath, {
-          looping: isAmbient,
-          durationSeconds: isAmbient ? 22 : entry.durationHint,
-          promptInfluence: isAmbient ? 0.5 : 0.7,
-        });
-        const audioDuration = Date.now() - audioStart;
-
-        saveGenerationLog(
-          {
-            model: "elevenlabs-sound-generation",
-            prompt: entry.description,
-            systemPrompt: null,
-            characterRefsJson: null,
-            numImagesAttached: 0,
-            hadReferenceImage: false,
-            responseText: result.success
-              ? `Generated ${entry.audioType} audio (${result.durationSeconds?.toFixed(1)}s)\naudio_id:${entry.id}`
-              : null,
-            responseModel: "elevenlabs-sound-generation",
-            inputImagePaths: [],
-            outputImagePath: null,
-            success: result.success,
-            errorMessage: result.error ?? null,
-            durationMs: audioDuration,
-          },
-          {
-            jobId: job.id,
-            bookId,
-            pageId: entry.pageId,
-            stepType: "audio",
-          }
-        );
-
-        if (result.success) {
-          db.prepare(
-            "UPDATE page_audio SET audio_path = ?, duration_seconds = ?, status = 'done', updated_at = ? WHERE id = ?"
-          ).run(`audio/${entry.id}.mp3`, result.durationSeconds, Date.now(), entry.id);
-        } else {
-          console.error(`Audio generation failed for ${entry.id}: ${result.error}`);
-          db.prepare(
-            "UPDATE page_audio SET status = 'error', updated_at = ? WHERE id = ?"
-          ).run(Date.now(), entry.id);
-        }
-      })
-    );
-
-    await Promise.all(audioPromises);
+    await generateCappedAudioForDesigns(job, bookId, audioDir, pageIds, pageDesigns);
 
     completedSteps++;
     updateJobStatus(job.id, {
@@ -992,129 +1111,19 @@ async function executeGenerateAudio(job: GenerationJob): Promise<void> {
 
   updateJobStatus(job.id, {
     status: "generating_audio",
-    progress_message: "Generating sound effects...",
+    progress_message: "Generating capped story audio...",
   });
 
   const uploadsDir = getUploadsDir();
   const audioDir = path.join(uploadsDir, "audio");
 
-  const audioEntries: Array<{
-    id: string;
-    pageId: string;
-    audioType: "ambient" | "sfx";
-    description: string;
-    durationHint: number;
-    sortOrder: number;
-  }> = [];
-
-  for (let i = 0; i < pages.length; i++) {
-    const design = pageDesigns[i];
-    if (!design) continue;
-
-    if (design.ambient) {
-      audioEntries.push({
-        id: nanoid(),
-        pageId: pages[i].id,
-        audioType: "ambient",
-        description: design.ambient,
-        durationHint: 22,
-        sortOrder: 0,
-      });
-    }
-
-    if (design.sfx) {
-      const sfxList = design.sfx.slice(0, 1);
-      for (let s = 0; s < sfxList.length; s++) {
-        const sfx = sfxList[s];
-        audioEntries.push({
-          id: nanoid(),
-          pageId: pages[i].id,
-          audioType: "sfx",
-          description: sfx.description,
-          durationHint: sfx.durationHint,
-          sortOrder: s + 1,
-        });
-      }
-    }
-  }
-
-  const insertAudio = db.prepare(
-    `INSERT INTO page_audio (id, page_id, audio_type, description, sort_order, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`
+  await generateCappedAudioForDesigns(
+    job,
+    bookId,
+    audioDir,
+    pages.map((page) => page.id),
+    pageDesigns
   );
-  const audioNow = Date.now();
-  for (const entry of audioEntries) {
-    insertAudio.run(
-      entry.id,
-      entry.pageId,
-      entry.audioType,
-      entry.description,
-      entry.sortOrder,
-      audioNow,
-      audioNow
-    );
-  }
-
-  const audioLimit = pLimit(4);
-  const audioPromises = audioEntries.map((entry) =>
-    audioLimit(async () => {
-      if (isJobCancelled(job.id)) return;
-
-      db.prepare(
-        "UPDATE page_audio SET status = 'generating', updated_at = ? WHERE id = ?"
-      ).run(Date.now(), entry.id);
-
-      const outputPath = path.join(audioDir, `${entry.id}.mp3`);
-      const isAmbient = entry.audioType === "ambient";
-
-      const audioStart = Date.now();
-      const result = await generateSoundEffect(entry.description, outputPath, {
-        looping: isAmbient,
-        durationSeconds: isAmbient ? 22 : entry.durationHint,
-        promptInfluence: isAmbient ? 0.5 : 0.7,
-      });
-      const audioDuration = Date.now() - audioStart;
-
-      saveGenerationLog(
-        {
-          model: "elevenlabs-sound-generation",
-          prompt: entry.description,
-          systemPrompt: null,
-          characterRefsJson: null,
-          numImagesAttached: 0,
-          hadReferenceImage: false,
-          responseText: result.success
-            ? `Generated ${entry.audioType} audio (${result.durationSeconds?.toFixed(1)}s)\naudio_id:${entry.id}`
-            : null,
-          responseModel: "elevenlabs-sound-generation",
-          inputImagePaths: [],
-          outputImagePath: null,
-          success: result.success,
-          errorMessage: result.error ?? null,
-          durationMs: audioDuration,
-        },
-        {
-          jobId: job.id,
-          bookId,
-          pageId: entry.pageId,
-          stepType: "audio",
-        }
-      );
-
-      if (result.success) {
-        db.prepare(
-          "UPDATE page_audio SET audio_path = ?, duration_seconds = ?, status = 'done', updated_at = ? WHERE id = ?"
-        ).run(`audio/${entry.id}.mp3`, result.durationSeconds, Date.now(), entry.id);
-      } else {
-        console.error(`Audio generation failed for ${entry.id}: ${result.error}`);
-        db.prepare(
-          "UPDATE page_audio SET status = 'error', updated_at = ? WHERE id = ?"
-        ).run(Date.now(), entry.id);
-      }
-    })
-  );
-
-  await Promise.all(audioPromises);
 
   db.prepare("UPDATE books SET updated_at = ? WHERE id = ?").run(
     Date.now(),

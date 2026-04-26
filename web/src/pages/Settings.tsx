@@ -220,7 +220,7 @@ export function Settings({ onLogout }: { onLogout: () => void }) {
           </p>
           {!info.elevenLabsKeyConfigured && (
             <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: 8 }}>
-              Add an ElevenLabs key to generate ambient soundscapes and sound effects for your stories.
+              Add an ElevenLabs key to generate up to two reusable ambient soundscapes and two story-highlight sound effects per story.
             </p>
           )}
           {!showElevenLabsForm ? (
