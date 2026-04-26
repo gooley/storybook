@@ -28,6 +28,7 @@ const MODEL_LISTS: ModelLists = {
     { id: "google/gemini-2.5-flash", name: "Gemini 2.5 Flash", isDefault: false, compatibility: "tested" },
     { id: "google/gemini-2.5-pro", name: "Gemini 2.5 Pro", isDefault: false, compatibility: "tested" },
     { id: "anthropic/claude-haiku-4.5", name: "Claude Haiku 4.5", isDefault: false, compatibility: "experimental" },
+    { id: "deepseek/deepseek-v4-pro", name: "DeepSeek V4 Pro", isDefault: false, compatibility: "experimental" },
     { id: "meta-llama/llama-4-maverick", name: "Llama 4 Maverick", isDefault: false, compatibility: "experimental" },
   ],
   illustration: [
@@ -36,6 +37,7 @@ const MODEL_LISTS: ModelLists = {
     { id: "google/gemini-2.5-flash-image", name: "Gemini 2.5 Flash Image", isDefault: false, compatibility: "tested" },
     { id: "openai/gpt-5-image", name: "GPT-5 Image", isDefault: false, compatibility: "tested" },
     { id: "openai/gpt-5-image-mini", name: "GPT-5 Image Mini", isDefault: false, compatibility: "tested" },
+    { id: "openai/gpt-5.4-image-2", name: "GPT-5.4 Image 2", isDefault: false, compatibility: "experimental" },
     { id: "black-forest-labs/flux.2-max", name: "FLUX.2 Max", isDefault: false, compatibility: "experimental" },
     { id: "black-forest-labs/flux.2-pro", name: "FLUX.2 Pro", isDefault: false, compatibility: "experimental" },
     { id: "black-forest-labs/flux.2-flex", name: "FLUX.2 Flex", isDefault: false, compatibility: "experimental" },
@@ -50,6 +52,7 @@ const MODEL_LISTS: ModelLists = {
     { id: "google/gemini-3-pro-image-preview", name: "Gemini 3 Pro Image", isDefault: false, compatibility: "tested" },
     { id: "openai/gpt-5-image", name: "GPT-5 Image", isDefault: false, compatibility: "tested" },
     { id: "openai/gpt-5-image-mini", name: "GPT-5 Image Mini", isDefault: false, compatibility: "tested" },
+    { id: "openai/gpt-5.4-image-2", name: "GPT-5.4 Image 2", isDefault: false, compatibility: "experimental" },
     { id: "black-forest-labs/flux.2-max", name: "FLUX.2 Max", isDefault: false, compatibility: "tested" },
     { id: "black-forest-labs/flux.2-pro", name: "FLUX.2 Pro", isDefault: false, compatibility: "tested" },
     { id: "black-forest-labs/flux.2-flex", name: "FLUX.2 Flex", isDefault: false, compatibility: "tested" },
