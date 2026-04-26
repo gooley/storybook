@@ -260,7 +260,7 @@ export function SetupWizard({
           <div className="setup-emoji">🔊</div>
           <h2>Add Sound Effects</h2>
           <p className="setup-subtitle">
-            Storybook can generate ambient soundscapes and sound effects for your stories using{" "}
+            Storybook can generate reusable ambient soundscapes and a few story-highlight sound effects using{" "}
             <a
               href="https://elevenlabs.io"
               target="_blank"
@@ -289,8 +289,7 @@ export function SetupWizard({
               <li>Copy the key and paste it below</li>
             </ol>
             <p className="setup-cost-note">
-              💡 The free tier includes 10,000 characters/month (~3 stories with audio).
-              The Starter plan ($5/mo) gives ~12 stories.
+              💡 Audio generation is capped to control cost: up to two reusable ambient loops and two sound effects per story.
             </p>
           </div>
 

@@ -296,10 +296,25 @@ export interface SoundDesignSfx {
   durationHint: number;
 }
 
+export interface SoundDesignAmbientTrack {
+  id: string;
+  description: string;
+}
+
 export interface PageDesign {
   visualDirection: string;
   ambient: string;
   sfx: SoundDesignSfx[];
+}
+
+const MAX_SOUND_DESIGN_AMBIENT_TRACKS = 2;
+const MAX_SOUND_DESIGN_SFX = 2;
+
+function clampSfxDurationHint(value: unknown): number {
+  const numeric =
+    typeof value === "number" ? value : Number.parseFloat(String(value ?? ""));
+  if (!Number.isFinite(numeric)) return 6;
+  return Math.max(4, Math.min(12, numeric));
 }
 
 /**
@@ -340,7 +355,7 @@ export async function generateContinuityAndSoundDesign(
     .map((p) => `Page ${p.pageNumber}: ${p.text}`)
     .join("\n");
 
-  const systemPrompt = `You are a creative director for a children's storybook, responsible for both illustration art direction and sound design. Your job is to ensure visual consistency across pages AND design immersive audio for each page.
+  const systemPrompt = `You are a creative director for a children's storybook, responsible for both illustration art direction and cost-conscious sound design. Your job is to ensure visual consistency across pages AND design immersive audio with very few generated sound clips.
 
 For EACH page, provide TWO things:
 
@@ -352,8 +367,9 @@ For EACH page, provide TWO things:
 - Any visual changes from the previous page (what specifically changed and what stayed the same?)
 
 ## SOUND DESIGN
-- **Ambient**: A single background soundscape description that loops during the page. Describe the environmental atmosphere — weather, nature sounds, room tone, crowd noise, etc. Be specific and evocative. Use audio terminology: ambience, drone, texture, atmosphere.
-- **SFX**: One short event sound effect for the key story moment on this page. This is a one-shot sound triggered by the reader. Use descriptive audio language: impact, whoosh, one-shot, creak, splash, etc. Include a duration hint (2-8 seconds). If a page has no distinct sound event, use an empty sfx array.
+- **Ambient tracks**: Create no more than ${MAX_SOUND_DESIGN_AMBIENT_TRACKS} reusable background soundscapes for the WHOLE STORY. Each should be a longer loopable atmosphere that can play across multiple pages. Use one track if the whole story has one consistent mood/setting; use two only when there is a meaningful setting or emotional shift. Do NOT create page-specific ambient prompts.
+- **Page ambient assignment**: Each page should choose one of the reusable ambient track IDs, deciding which pages play which loop. Reuse the same track ID across multiple pages.
+- **SFX**: Create no more than ${MAX_SOUND_DESIGN_SFX} total event sound effects for the WHOLE STORY. Spend them only on the strongest story moments where audio adds real delight or drama. Use empty sfx arrays on most pages. Use descriptive audio language: impact, whoosh, one-shot, creak, splash, etc. Include a duration hint (4-12 seconds).
 
 CRITICAL VISUAL RULES:
 - If a character puts on a costume/outfit on page 1, they must STILL be wearing it on subsequent pages unless the story explicitly says they changed.
@@ -361,25 +377,43 @@ CRITICAL VISUAL RULES:
 - Note the setting/background for each page.
 
 CRITICAL SOUND RULES:
-- Ambient should be atmospheric and loopable (no sudden starts/stops).
-- SFX should match the single most important action or event described in the page text.
+- Ambient tracks should be atmospheric, loopable, and about 30 seconds long with no sudden starts/stops.
+- Across all pages, use at most ${MAX_SOUND_DESIGN_AMBIENT_TRACKS} unique ambient track descriptions and at most ${MAX_SOUND_DESIGN_SFX} SFX objects total.
+- SFX should match only the most important action or event in the entire story, not every page.
 - Write prompts optimized for AI sound generation — be descriptive but concise.
-- If a page has no distinct sound events, use an empty sfx array.
+- If a page does not contain one of the few best sound moments, use an empty sfx array.
 
-Format your response as a JSON object with a "pages" array. Each element has:
+Format your response as a JSON object with:
+- "ambientTracks": array of at most ${MAX_SOUND_DESIGN_AMBIENT_TRACKS} objects with "id" ("ambient_1" or "ambient_2") and "description" (loopable background audio prompt)
+- "pages": array with exactly one element per story page. Each element has:
 - "visualDirection": string (3-5 sentences of illustration direction)
-- "ambient": string (atmospheric sound description for looping background audio)
-- "sfx": array of objects with "description" (string) and "durationHint" (number, seconds 2-8)
+- "ambientTrackId": string ("ambient_1" or "ambient_2", choosing which reusable loop plays on that page)
+- "sfx": array of objects with "description" (string) and "durationHint" (number, seconds 4-12). Across ALL pages, include no more than ${MAX_SOUND_DESIGN_SFX} total objects.
 
 Example:
 {
+  "ambientTracks": [
+    {
+      "id": "ambient_1",
+      "description": "Gentle forest ambience designed as a seamless 30 second loop, birdsong, soft wind rustling through oak leaves, distant stream texture"
+    },
+    {
+      "id": "ambient_2",
+      "description": "Cozy cottage room tone designed as a seamless 30 second loop, quiet hearth crackle, soft wooden creaks, warm indoor hush"
+    }
+  ],
   "pages": [
     {
       "visualDirection": "Luna stands at the forest edge wearing her red cape...",
-      "ambient": "Gentle forest ambience with birdsong, soft wind rustling through oak leaves, and distant stream babbling",
+      "ambientTrackId": "ambient_1",
       "sfx": [
-        { "description": "Wooden gate creaking open slowly with rusty hinges", "durationHint": 3 }
+        { "description": "Wooden gate creaking open slowly with rusty hinges, a rich storybook one-shot", "durationHint": 5 }
       ]
+    },
+    {
+      "visualDirection": "Luna returns to the cottage doorway...",
+      "ambientTrackId": "ambient_2",
+      "sfx": []
     }
   ]
 }
@@ -419,20 +453,59 @@ Write visual directions and sound design for each of the ${story.pages.length} p
       jsonStr = jsonStr.substring(objStart, objEnd + 1);
     }
 
-    const parsed = JSON.parse(jsonStr) as { pages: PageDesign[] };
-    const pageDesigns = parsed.pages || [];
+    const parsed = JSON.parse(jsonStr) as {
+      ambientTracks?: SoundDesignAmbientTrack[];
+      pages?: any[];
+    };
+    const rawAmbientTracks = Array.isArray(parsed.ambientTracks)
+      ? parsed.ambientTracks
+      : [];
+    const ambientTrackMap = new Map<string, string>();
+    for (const track of rawAmbientTracks.slice(0, MAX_SOUND_DESIGN_AMBIENT_TRACKS)) {
+      const id = typeof track.id === "string" ? track.id.trim() : "";
+      const description =
+        typeof track.description === "string" ? track.description.trim() : "";
+      if (id && description) {
+        ambientTrackMap.set(id, description);
+      }
+    }
+    const defaultAmbient = ambientTrackMap.values().next().value ?? "";
+    const pageDesigns = Array.isArray(parsed.pages) ? parsed.pages : [];
 
     // Validate and fill defaults
-    const designs: PageDesign[] = pageDesigns.map((pd: any) => ({
-      visualDirection: pd.visualDirection || "",
-      ambient: pd.ambient || "",
-      sfx: Array.isArray(pd.sfx)
-        ? pd.sfx.map((s: any) => ({
-            description: s.description || "",
-            durationHint: Math.max(2, Math.min(8, s.durationHint || 4)),
-          }))
-        : [],
-    }));
+    let totalSfxCount = 0;
+    const designs: PageDesign[] = pageDesigns.map((pd: any) => {
+      const ambientTrackId =
+        typeof pd.ambientTrackId === "string" ? pd.ambientTrackId.trim() : "";
+      const ambientFromTrack = ambientTrackMap.get(ambientTrackId);
+      const fallbackAmbient =
+        typeof pd.ambient === "string" ? pd.ambient.trim() : "";
+      const ambient = (ambientFromTrack ?? fallbackAmbient) || defaultAmbient;
+      const sfx: SoundDesignSfx[] = [];
+
+      if (Array.isArray(pd.sfx)) {
+        for (const rawSfx of pd.sfx) {
+          if (totalSfxCount >= MAX_SOUND_DESIGN_SFX) break;
+          const description =
+            typeof rawSfx?.description === "string"
+              ? rawSfx.description.trim()
+              : "";
+          if (!description) continue;
+          sfx.push({
+            description,
+            durationHint: clampSfxDurationHint(rawSfx?.durationHint),
+          });
+          totalSfxCount++;
+        }
+      }
+
+      return {
+        visualDirection:
+          typeof pd.visualDirection === "string" ? pd.visualDirection : "",
+        ambient,
+        sfx,
+      };
+    });
 
     return {
       data: designs,

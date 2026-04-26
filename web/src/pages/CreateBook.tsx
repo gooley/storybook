@@ -583,7 +583,7 @@ export function CreateBook() {
                 <span className="toggle-knob" />
               </span>
             </label>
-            <p className="form-hint">Generate ambient sounds and sound effects for each page</p>
+            <p className="form-hint">Generate up to two reusable ambient loops and two story-highlight sound effects</p>
           </div>
 
           {/* Model Settings */}

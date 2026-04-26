@@ -257,7 +257,7 @@ router.post("/:bookId/regenerate-illustrations", (req: Request, res: Response) =
   res.status(202).json({ jobId, bookId });
 });
 
-// POST /api/generate/:bookId/generate-audio — Generate sound effects for an existing book
+// POST /api/generate/:bookId/generate-audio — Generate capped audio for an existing book
 router.post("/:bookId/generate-audio", (req: Request, res: Response) => {
   const bookId = req.params.bookId as string;
 
