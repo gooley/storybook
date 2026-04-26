@@ -20,6 +20,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -37,6 +38,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -50,8 +53,6 @@ fun BookshelfScreen(
     repository: BookRepository,
     onBookClick: (Long) -> Unit,
     onCreateClick: () -> Unit,
-    onCharactersClick: () -> Unit,
-    onLocationsClick: () -> Unit = {},
     onSyncClick: () -> Unit = {}
 ) {
     val viewModel = remember { BookshelfViewModel(repository) }
@@ -81,18 +82,6 @@ fun BookshelfScreen(
                     Text("🔄", fontSize = 22.sp)
                 }
                 FloatingActionButton(
-                    onClick = onCharactersClick,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    Text("👤", fontSize = 22.sp)
-                }
-                FloatingActionButton(
-                    onClick = onLocationsClick,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    Text("📍", fontSize = 22.sp)
-                }
-                FloatingActionButton(
                     onClick = onCreateClick,
                     containerColor = MaterialTheme.colorScheme.primary
                 ) {
@@ -120,6 +109,16 @@ fun BookshelfScreen(
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     label = { Text("Search stories") },
                     leadingIcon = { Text("🔎") },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(
+                                onClick = { searchQuery = "" },
+                                modifier = Modifier.semantics { contentDescription = "Clear search" }
+                            ) {
+                                Text("✕")
+                            }
+                        }
+                    },
                     singleLine = true
                 )
 

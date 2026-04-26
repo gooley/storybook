@@ -15,11 +15,7 @@ import com.gooley.storybook.data.db.StorybookDatabase
 import com.gooley.storybook.data.repository.BookRepository
 import com.gooley.storybook.data.sync.SyncWorker
 import com.gooley.storybook.ui.bookshelf.BookshelfScreen
-import com.gooley.storybook.ui.characters.CharactersScreen
-import com.gooley.storybook.ui.characters.EditCharacterScreen
 import com.gooley.storybook.ui.create.CreateBookScreen
-import com.gooley.storybook.ui.locations.EditLocationScreen
-import com.gooley.storybook.ui.locations.LocationsScreen
 import com.gooley.storybook.ui.reader.ReaderScreen
 import com.gooley.storybook.ui.setup.SetupScreen
 
@@ -28,16 +24,8 @@ object Routes {
     const val BOOKSHELF = "bookshelf"
     const val READER = "reader/{bookId}"
     const val CREATE = "create"
-    const val CHARACTERS = "characters"
-    const val EDIT_CHARACTER = "character/edit/{characterId}"
-    const val ADD_CHARACTER = "character/add"
-    const val LOCATIONS = "locations"
-    const val ADD_LOCATION = "location/add"
-    const val EDIT_LOCATION = "location/edit/{locationId}"
 
     fun reader(bookId: Long) = "reader/$bookId"
-    fun editCharacter(id: Long) = "character/edit/$id"
-    fun editLocation(id: Long) = "location/edit/$id"
 }
 
 @Composable
@@ -82,8 +70,6 @@ fun NavGraph(initialApiKey: String? = null) {
                 repository = repository,
                 onBookClick = { bookId -> navController.navigate(Routes.reader(bookId)) },
                 onCreateClick = { navController.navigate(Routes.CREATE) },
-                onCharactersClick = { navController.navigate(Routes.CHARACTERS) },
-                onLocationsClick = { navController.navigate(Routes.LOCATIONS) },
                 onSyncClick = { SyncWorker.syncNow(context) }
             )
         }
@@ -110,68 +96,6 @@ fun NavGraph(initialApiKey: String? = null) {
                         popUpTo(Routes.BOOKSHELF)
                     }
                 },
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(Routes.CHARACTERS) {
-            CharactersScreen(
-                characterDao = characterDao,
-                onAddClick = { navController.navigate(Routes.ADD_CHARACTER) },
-                onEditClick = { id -> navController.navigate(Routes.editCharacter(id)) },
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(Routes.ADD_CHARACTER) {
-            EditCharacterScreen(
-                characterDao = characterDao,
-                characterId = null,
-                onSaved = { navController.popBackStack() },
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(
-            route = Routes.EDIT_CHARACTER,
-            arguments = listOf(navArgument("characterId") { type = NavType.LongType })
-        ) { backStackEntry ->
-            val characterId = backStackEntry.arguments?.getLong("characterId") ?: return@composable
-            EditCharacterScreen(
-                characterDao = characterDao,
-                characterId = characterId,
-                onSaved = { navController.popBackStack() },
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(Routes.LOCATIONS) {
-            LocationsScreen(
-                locationDao = locationDao,
-                onAddClick = { navController.navigate(Routes.ADD_LOCATION) },
-                onEditClick = { id -> navController.navigate(Routes.editLocation(id)) },
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(Routes.ADD_LOCATION) {
-            EditLocationScreen(
-                locationDao = locationDao,
-                locationId = null,
-                onSaved = { navController.popBackStack() },
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable(
-            route = Routes.EDIT_LOCATION,
-            arguments = listOf(navArgument("locationId") { type = NavType.LongType })
-        ) { backStackEntry ->
-            val locationId = backStackEntry.arguments?.getLong("locationId") ?: return@composable
-            EditLocationScreen(
-                locationDao = locationDao,
-                locationId = locationId,
-                onSaved = { navController.popBackStack() },
                 onBack = { navController.popBackStack() }
             )
         }
