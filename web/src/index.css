@@ -42,6 +42,23 @@ body {
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
 .page-header h2 { font-size: 1.5rem; }
 
+.bookshelf-search { margin: -8px 0 24px; }
+.bookshelf-search input {
+  width: 100%;
+  max-width: 420px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  box-shadow: var(--shadow);
+}
+.bookshelf-search input:focus {
+  outline: 2px solid var(--primary-light);
+  border-color: var(--primary);
+}
+
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; }
 
 .book-cover {

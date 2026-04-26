@@ -6,6 +6,7 @@ export function Books() {
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [showHidden, setShowHidden] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
 
   const load = useCallback(async () => {
@@ -24,6 +25,21 @@ export function Books() {
 
   const hiddenCount = books.filter(b => b.hidden).length;
   const visibleBooks = showHidden ? books : books.filter(b => !b.hidden);
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const isSearching = visibleBooks.length > 0 && normalizedSearch.length > 0;
+  const filteredBooks = isSearching
+    ? visibleBooks.filter((book) =>
+        book.title.toLowerCase().includes(normalizedSearch) ||
+        book.description.toLowerCase().includes(normalizedSearch)
+      )
+    : visibleBooks;
+  const emptyMessage = visibleBooks.length === 0 && hiddenCount > 0
+    ? "All books are hidden."
+    : isSearching
+      ? "No stories match your search."
+      : "No stories yet. Generate one on your e-reader!";
+
+  const emptyIcon = isSearching ? "🔎" : "📖";
 
   return (
     <div>
@@ -36,14 +52,25 @@ export function Books() {
           </label>
         )}
       </div>
-      {visibleBooks.length === 0 ? (
+      {visibleBooks.length > 0 && (
+        <div className="bookshelf-search">
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search stories"
+            aria-label="Search stories"
+          />
+        </div>
+      )}
+      {filteredBooks.length === 0 ? (
         <div className="empty-state">
-          <div className="emoji">📖</div>
-          <p>{hiddenCount > 0 ? "All books are hidden." : "No stories yet. Generate one on your e-reader!"}</p>
+          <div className="emoji">{emptyIcon}</div>
+          <p>{emptyMessage}</p>
         </div>
       ) : (
         <div className="card-grid">
-          {visibleBooks.map((book) => (
+          {filteredBooks.map((book) => (
             <div key={book.id} className={`book-cover${book.hidden ? " hidden" : ""}`} onClick={() => navigate(`/read/${book.id}`)}>
               <button
                 className="detail-btn"
