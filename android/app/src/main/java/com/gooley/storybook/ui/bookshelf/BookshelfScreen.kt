@@ -21,12 +21,16 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,6 +57,16 @@ fun BookshelfScreen(
     val viewModel = remember { BookshelfViewModel(repository) }
     val books by viewModel.books.collectAsState()
     val bookIdsWithAudio by viewModel.bookIdsWithAudio.collectAsState()
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val trimmedSearchQuery = searchQuery.trim()
+    val filteredBooks = if (trimmedSearchQuery.isBlank()) {
+        books
+    } else {
+        books.filter { book ->
+            book.title.contains(trimmedSearchQuery, ignoreCase = true) ||
+                book.description.contains(trimmedSearchQuery, ignoreCase = true)
+        }
+    }
 
     Scaffold(
         floatingActionButton = {
@@ -93,24 +107,71 @@ fun BookshelfScreen(
         if (books.isEmpty()) {
             EmptyBookshelf(modifier = Modifier.padding(innerPadding))
         } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(columns),
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding),
-                contentPadding = PaddingValues(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(innerPadding)
             ) {
-                items(books, key = { it.id }) { book ->
-                    BookCard(
-                        book = book,
-                        hasAudio = book.id in bookIdsWithAudio,
-                        onClick = { onBookClick(book.id) }
-                    )
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    label = { Text("Search stories") },
+                    leadingIcon = { Text("🔎") },
+                    singleLine = true
+                )
+
+                if (filteredBooks.isEmpty()) {
+                    EmptySearchResults(modifier = Modifier.weight(1f))
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(columns),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(filteredBooks, key = { it.id }) { book ->
+                            BookCard(
+                                book = book,
+                                hasAudio = book.id in bookIdsWithAudio,
+                                onClick = { onBookClick(book.id) }
+                            )
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun EmptySearchResults(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("🔎", fontSize = 64.sp, textAlign = TextAlign.Center)
+        Text(
+            text = "No stories match your search",
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 16.dp)
+        )
+        Text(
+            text = "Try a different title or description",
+            fontSize = 16.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 8.dp)
+        )
     }
 }
 
