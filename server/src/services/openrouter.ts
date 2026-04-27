@@ -350,7 +350,9 @@ function buildStoryGuidanceContext(guidance: StoryGuidance | undefined): string 
     sections.push(`Story-level notes:\n${metadata.join("\n")}`);
   }
   if (guidance.typesettingNotes) {
-    sections.push(`Typesetting notes:\n${guidance.typesettingNotes}`);
+    sections.push(
+      `Typesetting notes for downstream layout only; do not represent them visually in the artwork:\n${guidance.typesettingNotes}`
+    );
   }
   if (guidance.illustrationStyleGuide) {
     sections.push(`Illustration style guide:\n${guidance.illustrationStyleGuide}`);
@@ -381,12 +383,6 @@ function buildRequiredVisualGuidance(
   if (guidance.illustrationStyleGuide?.trim()) {
     required.push(`Overall illustration style guide: ${guidance.illustrationStyleGuide.trim()}`);
   }
-  if (guidance.typesettingNotes?.trim()) {
-    required.push(
-      `Typesetting/composition notes: ${guidance.typesettingNotes.trim()} Use these only to reserve space and guide composition; do not draw readable text.`
-    );
-  }
-
   return required.join("\n");
 }
 
@@ -400,6 +396,59 @@ function mergeVisualDirectionWithGuidance(
   if (!requiredGuidance) return cleanGenerated;
   if (!cleanGenerated) return requiredGuidance;
   return `${cleanGenerated}\n\nRequired user guidance:\n${requiredGuidance}`;
+}
+
+interface PlanningReferenceImages {
+  imageParts: Record<string, any>[];
+  context: string;
+  inputImagePaths: string[];
+  numImagesAttached: number;
+}
+
+async function buildPlanningReferenceImages(
+  characters: CharacterRef[],
+  locations: LocationRef[],
+  uploadsDir: string
+): Promise<PlanningReferenceImages> {
+  const imageParts: Record<string, any>[] = [];
+  const contextLines: string[] = [];
+  const inputImagePaths: string[] = [];
+  let refPhotoCount = 0;
+
+  for (const character of characters) {
+    if (!character.photoPath) continue;
+    const fullPath = path.join(uploadsDir, character.photoPath);
+    if (!fs.existsSync(fullPath)) continue;
+
+    refPhotoCount += 1;
+    const scaled = await scalePhoto(fullPath);
+    imageParts.push(fileToBase64Part(scaled, "image/jpeg"));
+    inputImagePaths.push(character.photoPath);
+    contextLines.push(`- photo ${refPhotoCount}: character ${character.name}`);
+  }
+
+  for (const location of locations) {
+    for (const photoPath of location.photoPaths) {
+      const fullPath = path.join(uploadsDir, photoPath);
+      if (!fs.existsSync(fullPath)) continue;
+
+      refPhotoCount += 1;
+      const scaled = await scalePhoto(fullPath);
+      imageParts.push(fileToBase64Part(scaled, "image/jpeg"));
+      inputImagePaths.push(photoPath);
+      contextLines.push(`- photo ${refPhotoCount}: location ${location.name}`);
+    }
+  }
+
+  return {
+    imageParts,
+    context:
+      contextLines.length > 0
+        ? `\n\nReference photos attached for visual planning:\n${contextLines.join("\n")}\nUse these images to understand real visual details, improve art direction, and fill in missing visual specifics. Do not assume the story text or illustration notes contain every important visual detail.`
+        : "",
+    inputImagePaths,
+    numImagesAttached: imageParts.length,
+  };
 }
 
 /**
@@ -418,6 +467,9 @@ export async function generateContinuityAndSoundDesign(
 ): Promise<GenerationResult<PageDesign[]>> {
   const useModel = model || DEFAULT_STORY_MODEL;
   const startTime = Date.now();
+  const uploadsDir = getUploadsDir();
+  let numImagesAttached = 0;
+  let inputImagePaths: string[] = [];
 
   let characterContext = "";
   if (characters.length > 0) {
@@ -448,7 +500,7 @@ export async function generateContinuityAndSoundDesign(
 ADVANCED STORY GUIDANCE RULES:
 - The user-provided page text is final. Do not revise, paraphrase, or "improve" it.
 - User-provided illustration notes are authoritative scene requirements. Your visual directions may add continuity, poses, props, lighting, safety, transitions, and recurring visual jokes, but must not contradict those notes.
-- Treat typesetting notes as composition and negative-space guidance only. Do not ask the image model to render words, letters, captions, labels, or page text.
+- Treat typesetting notes as downstream layout information only, not as illustration requirements. Do not include text, letters, captions, labels, blank panels, placeholder boxes, or any visual area intended for text.
 - Preserve cumulative/refrain visual patterns when the user specifies them.`
     : "";
 
@@ -472,6 +524,7 @@ CRITICAL VISUAL RULES:
 - If a character puts on a costume/outfit on page 1, they must STILL be wearing it on subsequent pages unless the story explicitly says they changed.
 - Track the physical state of every character and prop across pages.
 - Note the setting/background for each page.
+- If reference photos are attached, inspect them and incorporate concrete visual details into the art direction. The page text and user notes may be incomplete; use photos to improve character design, setting details, props, palette, and composition while still respecting the written story.
 ${advancedGuidanceRules}
 
 CRITICAL SOUND RULES:
@@ -525,13 +578,34 @@ ${allPagesText}
 ${guidanceContext}
 
 Write visual directions and sound design for each of the ${story.pages.length} pages.`;
+  let finalUserPrompt = userPrompt;
 
   try {
+    const referenceImages = await buildPlanningReferenceImages(
+      characters,
+      locations,
+      uploadsDir
+    );
+    numImagesAttached = referenceImages.numImagesAttached;
+    inputImagePaths = referenceImages.inputImagePaths;
+
+    finalUserPrompt = `${userPrompt}${referenceImages.context}`;
+    const userMessage =
+      numImagesAttached > 0
+        ? {
+            role: "user",
+            content: [
+              ...referenceImages.imageParts,
+              { type: "text", text: finalUserPrompt },
+            ],
+          }
+        : { role: "user", content: finalUserPrompt };
+
     const response = await makeRequest({
       model: useModel,
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
+        userMessage,
       ],
       temperature: 0.8,
       max_tokens: Math.min(12000, Math.max(4096, story.pages.length * 350 + 1500)),
@@ -614,14 +688,14 @@ Write visual directions and sound design for each of the ${story.pages.length} p
     return {
       data: designs,
       model: useModel,
-      prompt: userPrompt,
+      prompt: finalUserPrompt,
       systemPrompt,
       responseText: content,
       responseModel: extractResponseModel(response),
-      numImagesAttached: 0,
-      hadReferenceImage: false,
+      numImagesAttached,
+      hadReferenceImage: numImagesAttached > 0,
       characterRefsJson: null,
-      inputImagePaths: [],
+      inputImagePaths,
       outputImagePath: null,
       success: true,
       errorMessage: null,
@@ -632,14 +706,14 @@ Write visual directions and sound design for each of the ${story.pages.length} p
     return {
       data: [],
       model: useModel,
-      prompt: userPrompt,
+      prompt: finalUserPrompt,
       systemPrompt,
       responseText: null,
       responseModel: null,
-      numImagesAttached: 0,
-      hadReferenceImage: false,
+      numImagesAttached,
+      hadReferenceImage: numImagesAttached > 0,
       characterRefsJson: null,
-      inputImagePaths: [],
+      inputImagePaths,
       outputImagePath: null,
       success: false,
       errorMessage: e.message || "Unknown error",
@@ -982,14 +1056,14 @@ export async function generateIllustration(
   if (visualDirection) {
     prompt += `VISUAL DIRECTION FOR THIS PAGE (from the art director — follow carefully):\n`;
     prompt += `${visualDirection}\n\n`;
-    prompt += `If the visual direction includes typesetting or text-placement notes, use them only to reserve blank space and guide composition; do not render readable text in the artwork.\n\n`;
+    prompt += `If the visual direction includes typesetting or text-placement notes, ignore those layout instructions for the image itself. Do not render text, labels, captions, letters, blank panels, placeholder boxes, or empty UI-like areas intended for later text.\n\n`;
   }
 
   prompt += `Style: Sharp pen and ink illustration with bold lines. `;
   prompt += `Use a limited palette of 6 highly saturated colors suitable for a color e-ink display. `;
   prompt += `The illustration should be simple, clear, and appealing to young children.\n\n`;
   prompt += `IMPORTANT: The image must be horizontal/landscape orientation.\n\n`;
-  prompt += `IMPORTANT: Do NOT include any text, words, letters, numbers, captions, titles, labels, or writing of any kind in the image. The image must contain only visual artwork with zero text.`;
+  prompt += `IMPORTANT: Do NOT include any text, words, letters, numbers, captions, titles, labels, writing, blank text panels, placeholder boxes, or areas intended for later text. The image must contain only visual artwork with zero text or text placeholders.`;
 
   const characterRefsJson =
     characters.length > 0
