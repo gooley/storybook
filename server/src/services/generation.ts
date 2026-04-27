@@ -599,11 +599,6 @@ function buildFallbackVisualDirection(
   if (guidance.illustrationStyleGuide?.trim()) {
     parts.push(`Overall illustration style guide: ${guidance.illustrationStyleGuide.trim()}`);
   }
-  if (guidance.typesettingNotes?.trim()) {
-    parts.push(
-      `Typesetting/composition notes: ${guidance.typesettingNotes.trim()} Use these only to reserve blank space and guide composition; do not draw readable text.`
-    );
-  }
   return parts.length > 0 ? parts.join("\n") : undefined;
 }
 
