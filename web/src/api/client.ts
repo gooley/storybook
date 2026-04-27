@@ -153,6 +153,7 @@ export const getPageImageUrl = (pageId: string) => `${BASE}/books/pages/${pageId
 export const startGeneration = (data: {
   description: string;
   pageCount: number;
+  storyMode?: "auto" | "standard" | "advanced";
   characterIds: string[];
   locationIds: string[];
   elementPhotoPaths?: string[];
@@ -201,6 +202,9 @@ export const getAvailableModels = () => request<ModelLists>("/models");
 export interface GenerationParams {
   description: string;
   pageCount: number;
+  storyMode?: "auto" | "standard" | "advanced";
+  requestedStoryMode?: "auto" | "standard" | "advanced" | null;
+  advancedStorySpec?: unknown;
   characterIds: string[];
   locationIds: string[];
   title: string;

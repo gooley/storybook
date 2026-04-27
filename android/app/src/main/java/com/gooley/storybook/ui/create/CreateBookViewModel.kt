@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 data class CreateBookUiState(
     val description: String = "",
     val pageCount: Int = 4,
+    val advancedPrompt: Boolean = false,
     val isGenerating: Boolean = false,
     val progress: String = "",
     val progressFraction: Float = 0f,
@@ -98,6 +99,10 @@ class CreateBookViewModel(
         _uiState.value = _uiState.value.copy(pageCount = count)
     }
 
+    fun updateAdvancedPrompt(enabled: Boolean) {
+        _uiState.value = _uiState.value.copy(advancedPrompt = enabled)
+    }
+
     fun toggleCharacter(id: Long) {
         val current = _uiState.value.selectedCharacterIds
         _uiState.value = _uiState.value.copy(
@@ -124,6 +129,7 @@ class CreateBookViewModel(
                 val bookId = repository.generateBook(
                     description = state.description,
                     pageCount = state.pageCount,
+                    storyMode = if (state.advancedPrompt) "advanced" else "auto",
                     selectedCharacterIds = state.selectedCharacterIds,
                     selectedLocationIds = state.selectedLocationIds,
                     onProgress = { message, fraction ->

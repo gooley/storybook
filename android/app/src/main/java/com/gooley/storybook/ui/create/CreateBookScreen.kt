@@ -141,12 +141,35 @@ fun CreateBookScreen(
                         value = uiState.description,
                         onValueChange = viewModel::updateDescription,
                         label = { Text("What's the story about?") },
-                        placeholder = { Text("Describe the gist — characters, setting, what happens...") },
+                        placeholder = {
+                            Text(
+                                if (uiState.advancedPrompt) {
+                                    "Paste a full page-by-page story with Text and Illustration notes..."
+                                } else {
+                                    "Describe the gist — characters, setting, what happens..."
+                                }
+                            )
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(140.dp),
-                        maxLines = 6
+                            .height(if (uiState.advancedPrompt) 280.dp else 140.dp),
+                        maxLines = if (uiState.advancedPrompt) 16 else 6
                     )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    FilterChip(
+                        selected = uiState.advancedPrompt,
+                        onClick = { viewModel.updateAdvancedPrompt(!uiState.advancedPrompt) },
+                        label = { Text("Advanced page-by-page prompt") }
+                    )
+                    if (uiState.advancedPrompt) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Use Page N sections with Text and Illustration notes. The server derives the page count.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
 
                     // Page count selection
                     Spacer(modifier = Modifier.height(16.dp))
@@ -156,15 +179,23 @@ fun CreateBookScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf(2 to "Short (2)", 4 to "Medium (4)", 8 to "Long (8)").forEach { (count, label) ->
-                            FilterChip(
-                                selected = uiState.pageCount == count,
-                                onClick = { viewModel.updatePageCount(count) },
-                                label = { Text(label) }
-                            )
+                    if (uiState.advancedPrompt) {
+                        Text(
+                            text = "Derived from advanced prompt",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(2 to "Short (2)", 4 to "Medium (4)", 8 to "Long (8)").forEach { (count, label) ->
+                                FilterChip(
+                                    selected = uiState.pageCount == count,
+                                    onClick = { viewModel.updatePageCount(count) },
+                                    label = { Text(label) }
+                                )
+                            }
                         }
                     }
 

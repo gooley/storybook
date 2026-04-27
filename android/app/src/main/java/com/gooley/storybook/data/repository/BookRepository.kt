@@ -76,6 +76,7 @@ class BookRepository(private val context: Context) {
     suspend fun generateBook(
         description: String,
         pageCount: Int = 4,
+        storyMode: String? = null,
         selectedCharacterIds: Set<Long> = emptySet(),
         selectedLocationIds: Set<Long> = emptySet(),
         onProgress: (String, Float) -> Unit,
@@ -106,6 +107,7 @@ class BookRepository(private val context: Context) {
             GenerationRequest(
                 description = description,
                 pageCount = pageCount,
+                storyMode = storyMode,
                 characterIds = characterUuids,
                 locationIds = locationUuids,
                 bookId = bookId

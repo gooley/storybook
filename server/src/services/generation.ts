@@ -13,8 +13,14 @@ import {
   GenerationResult,
   TraceMetadata,
   PageDesign,
+  StoryGuidance,
+  StoryResponse,
 } from "./openrouter";
 import { generateSoundEffect, hasElevenLabsKey } from "./elevenlabs";
+import {
+  AdvancedStorySpec,
+  parseAdvancedStoryPrompt,
+} from "./advancedStoryPrompt";
 
 // --- Generation Log Helper ---
 
@@ -511,6 +517,96 @@ function enrichDescription(
   return enriched;
 }
 
+function isAdvancedStorySpec(value: any): value is AdvancedStorySpec {
+  return (
+    value != null &&
+    typeof value === "object" &&
+    typeof value.title === "string" &&
+    Array.isArray(value.pages) &&
+    value.pages.every(
+      (page: any) =>
+        Number.isInteger(page?.pageNumber) &&
+        typeof page?.text === "string" &&
+        typeof page?.illustrationNotes === "string"
+    )
+  );
+}
+
+function resolveAdvancedStorySpec(payload: any): AdvancedStorySpec {
+  if (isAdvancedStorySpec(payload.advancedStorySpec)) {
+    return payload.advancedStorySpec;
+  }
+  return parseAdvancedStoryPrompt(String(payload.description ?? ""));
+}
+
+function storyFromAdvancedSpec(spec: AdvancedStorySpec): StoryResponse {
+  return {
+    title: spec.title,
+    pages: spec.pages.map((page) => ({
+      pageNumber: page.pageNumber,
+      text: page.text,
+    })),
+  };
+}
+
+function buildAdvancedStoryGuidance(spec: AdvancedStorySpec): StoryGuidance {
+  return {
+    audience: spec.audience,
+    rhymeMode: spec.rhymeMode,
+    coreRefrain: spec.coreRefrain,
+    typesettingNotes: spec.typesettingNotes,
+    illustrationStyleGuide: spec.illustrationStyleGuide,
+    pages: spec.pages.map((page) => ({
+      pageNumber: page.pageNumber,
+      illustrationNotes: page.illustrationNotes,
+    })),
+  };
+}
+
+function createAdvancedStoryLogResult(
+  spec: AdvancedStorySpec,
+  story: StoryResponse,
+  durationMs: number
+): GenerationResult<StoryResponse> {
+  return {
+    data: story,
+    model: "user-provided-advanced-story",
+    prompt: spec.rawPrompt,
+    systemPrompt: null,
+    responseText: JSON.stringify(spec, null, 2),
+    responseModel: null,
+    numImagesAttached: 0,
+    hadReferenceImage: false,
+    characterRefsJson: null,
+    inputImagePaths: [],
+    outputImagePath: null,
+    success: true,
+    errorMessage: null,
+    durationMs,
+  };
+}
+
+function buildFallbackVisualDirection(
+  guidance: StoryGuidance | undefined,
+  pageNumber: number
+): string | undefined {
+  if (!guidance) return undefined;
+  const parts: string[] = [];
+  const pageGuidance = guidance.pages?.find((page) => page.pageNumber === pageNumber);
+  if (pageGuidance?.illustrationNotes.trim()) {
+    parts.push(`User illustration notes for this page: ${pageGuidance.illustrationNotes.trim()}`);
+  }
+  if (guidance.illustrationStyleGuide?.trim()) {
+    parts.push(`Overall illustration style guide: ${guidance.illustrationStyleGuide.trim()}`);
+  }
+  if (guidance.typesettingNotes?.trim()) {
+    parts.push(
+      `Typesetting/composition notes: ${guidance.typesettingNotes.trim()} Use these only to reserve blank space and guide composition; do not draw readable text.`
+    );
+  }
+  return parts.length > 0 ? parts.join("\n") : undefined;
+}
+
 // --- Book Generation ---
 
 async function executeGenerateBook(job: GenerationJob): Promise<void> {
@@ -528,13 +624,19 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
   const audioDir = path.join(uploadsDir, "audio");
   const now = Date.now();
   const audioEnabled = hasElevenLabsKey() && payload.generateAudio !== false;
+  const isAdvancedStory = payload.storyMode === "advanced";
+  const advancedSpec = isAdvancedStory ? resolveAdvancedStorySpec(payload) : null;
+  const advancedGuidance = advancedSpec ? buildAdvancedStoryGuidance(advancedSpec) : undefined;
+  const plannedPageCount = advancedSpec?.pages.length ?? pageCount;
 
-  // total_steps = 1 (story) + pageCount (illustrations) + 1 (cover) + 1 (audio, if enabled)
-  const totalSteps = pageCount + 2 + (audioEnabled ? 1 : 0);
+  // total_steps = 1 (story/prep) + pages (illustrations) + 1 (cover) + 1 (audio, if enabled)
+  let totalSteps = plannedPageCount + 2 + (audioEnabled ? 1 : 0);
 
   updateJobStatus(job.id, {
     status: "generating_story",
-    progress_message: "Writing story with AI...",
+    progress_message: isAdvancedStory
+      ? "Preparing advanced story..."
+      : "Writing story with AI...",
     progress_fraction: 0,
     total_steps: totalSteps,
     completed_steps: 0,
@@ -545,23 +647,36 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
   // Load characters and locations
   const characters = loadCharacterRefs(characterIds || []);
   const locations = loadLocationRefs(locationIds || []);
-  const enrichedDescription = enrichDescription(description, characters, locations, theme, customTheme);
+  let story: StoryResponse;
+  let storyResult: GenerationResult<StoryResponse>;
 
-  // Step 1: Generate story text (with reference images for context)
-  const storyResult = await generateStory(
-    enrichedDescription,
-    pageCount,
-    characters,
-    locations,
-    elementPhotoPaths || [],
-    storyModel,
-    {
-      bookId,
-      stepType: "story",
-      totalPages: pageCount,
-    }
-  );
-  const story = storyResult.data;
+  if (advancedSpec) {
+    const storyStart = Date.now();
+    story = storyFromAdvancedSpec(advancedSpec);
+    storyResult = createAdvancedStoryLogResult(
+      advancedSpec,
+      story,
+      Date.now() - storyStart
+    );
+  } else {
+    const enrichedDescription = enrichDescription(description, characters, locations, theme, customTheme);
+
+    // Step 1: Generate story text (with reference images for context)
+    storyResult = await generateStory(
+      enrichedDescription,
+      pageCount,
+      characters,
+      locations,
+      elementPhotoPaths || [],
+      storyModel,
+      {
+        bookId,
+        stepType: "story",
+        totalPages: plannedPageCount,
+      }
+    );
+    story = storyResult.data;
+  }
 
   saveGenerationLog(storyResult, {
     jobId: job.id,
@@ -572,6 +687,10 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
 
   if (isJobCancelled(job.id)) return;
 
+  const actualPageCount = story.pages.length;
+  totalSteps = actualPageCount + 2 + (audioEnabled ? 1 : 0);
+  updateJobStatus(job.id, { total_steps: totalSteps });
+
   // Create book + pages in DB
   db.prepare(
     `INSERT INTO books (id, title, description, status, created_at, updated_at)
@@ -579,6 +698,14 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
   ).run(bookId, story.title, description, now, now);
 
   const pageIds: string[] = [];
+  const advancedPagesByNumber = new Map(
+    advancedSpec?.pages.map((page) => [page.pageNumber, page]) ?? []
+  );
+  const insertGuidance = db.prepare(
+    `INSERT OR REPLACE INTO page_generation_guidance
+     (page_id, story_mode, illustration_notes, typesetting_notes, illustration_style_guide, created_at, updated_at)
+     VALUES (?, 'advanced', ?, ?, ?, ?, ?)`
+  );
   for (const page of story.pages) {
     const pageId = nanoid();
     pageIds.push(pageId);
@@ -586,11 +713,25 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
       `INSERT INTO pages (id, book_id, page_number, text, image_status, created_at, updated_at)
        VALUES (?, ?, ?, ?, 'pending', ?, ?)`
     ).run(pageId, bookId, page.pageNumber, page.text, now, now);
+
+    const advancedPage = advancedPagesByNumber.get(page.pageNumber);
+    if (advancedSpec && advancedPage) {
+      insertGuidance.run(
+        pageId,
+        advancedPage.illustrationNotes,
+        advancedSpec.typesettingNotes ?? null,
+        advancedSpec.illustrationStyleGuide ?? null,
+        now,
+        now
+      );
+    }
   }
 
   updateJobStatus(job.id, {
     status: "generating_illustrations",
-    progress_message: "Story written! Generating illustrations...",
+    progress_message: isAdvancedStory
+      ? "Advanced story prepared! Generating illustrations..."
+      : "Story written! Generating illustrations...",
     progress_fraction: 1 / totalSteps,
     completed_steps: 1,
   });
@@ -610,8 +751,9 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
     {
       bookId,
       stepType: "continuity",
-      totalPages: pageCount,
-    }
+      totalPages: actualPageCount,
+    },
+    advancedGuidance
   );
   const pageDesigns = designResult.data;
 
@@ -629,8 +771,12 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
   const completedPageIds: string[] = [];
   let completedSteps = 1;
 
-  // Extract visual directions from combined design result
-  const visualDirections = pageDesigns.map((d) => d.visualDirection);
+  // Extract visual directions from combined design result, falling back to
+  // user-provided advanced notes if planning fails or returns a short array.
+  const visualDirections = story.pages.map((page, index) =>
+    pageDesigns[index]?.visualDirection ||
+    buildFallbackVisualDirection(advancedGuidance, page.pageNumber)
+  );
 
   for (let i = 0; i < story.pages.length; i++) {
     if (isJobCancelled(job.id)) return;
@@ -644,7 +790,7 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
     ).run(Date.now(), pageId);
 
     updateJobStatus(job.id, {
-      progress_message: `Drawing illustration ${i + 1} of ${pageCount}...`,
+      progress_message: `Drawing illustration ${i + 1} of ${actualPageCount}...`,
     });
 
     const illusResult = await generateIllustration(
@@ -661,7 +807,7 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
         bookId,
         stepType: "illustration",
         pageNumber: i + 1,
-        totalPages: pageCount,
+        totalPages: actualPageCount,
       }
     );
     const success = illusResult.data;
@@ -707,7 +853,7 @@ async function executeGenerateBook(job: GenerationJob): Promise<void> {
     {
       bookId,
       stepType: "cover",
-      totalPages: pageCount,
+      totalPages: actualPageCount,
     }
   );
   const coverSuccess = coverResult.data;
@@ -783,6 +929,12 @@ async function executeRegenerateIllustrations(
     image_path: string | null;
     image_status: string;
   }
+  interface DbPageGuidance {
+    page_id: string;
+    illustration_notes: string;
+    typesetting_notes: string | null;
+    illustration_style_guide: string | null;
+  }
 
   const book = db
     .prepare("SELECT id, title, description FROM books WHERE id = ?")
@@ -794,6 +946,21 @@ async function executeRegenerateIllustrations(
       "SELECT id, page_number, text, image_path, image_status FROM pages WHERE book_id = ? AND deleted_at IS NULL ORDER BY page_number"
     )
     .all(bookId) as DbPage[];
+
+  const pageGuidanceById = new Map<string, DbPageGuidance>();
+  if (pages.length > 0) {
+    const placeholders = pages.map(() => "?").join(",");
+    const guidanceRows = db
+      .prepare(
+        `SELECT page_id, illustration_notes, typesetting_notes, illustration_style_guide
+         FROM page_generation_guidance
+         WHERE story_mode = 'advanced' AND page_id IN (${placeholders})`
+      )
+      .all(...pages.map((page) => page.id)) as DbPageGuidance[];
+    for (const guidance of guidanceRows) {
+      pageGuidanceById.set(guidance.page_id, guidance);
+    }
+  }
 
   const needsRegen = pages.filter(
     (p) => p.image_status === "error" || p.image_status === "pending"
@@ -852,7 +1019,23 @@ async function executeRegenerateIllustrations(
       characters,
       locations,
       undefined,
-      undefined,
+      buildFallbackVisualDirection(
+        pageGuidanceById.has(page.id)
+          ? {
+              typesettingNotes: pageGuidanceById.get(page.id)?.typesetting_notes ?? undefined,
+              illustrationStyleGuide:
+                pageGuidanceById.get(page.id)?.illustration_style_guide ?? undefined,
+              pages: [
+                {
+                  pageNumber: page.page_number,
+                  illustrationNotes:
+                    pageGuidanceById.get(page.id)?.illustration_notes ?? "",
+                },
+              ],
+            }
+          : undefined,
+        page.page_number
+      ),
       undefined,
       {
         bookId,
