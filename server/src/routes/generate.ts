@@ -9,6 +9,15 @@ import {
   getActiveJobs,
   GenerationJob,
 } from "../services/generation";
+import {
+  AdvancedStoryPromptError,
+  MAX_ADVANCED_PROMPT_LENGTH,
+  MAX_STANDARD_PROMPT_LENGTH,
+  StoryMode,
+  detectAdvancedStoryPrompt,
+  normalizeStoryMode,
+  parseAdvancedStoryPrompt,
+} from "../services/advancedStoryPrompt";
 
 const router = Router();
 
@@ -64,11 +73,60 @@ router.post("/book", (req: Request, res: Response) => {
     res.status(400).json({ error: "description is required" });
     return;
   }
-  const count = parseInt(pageCount) || 4;
-  if (![2, 4, 8].includes(count)) {
-    res.status(400).json({ error: "pageCount must be 2, 4, or 8" });
+
+  let requestedStoryMode: StoryMode;
+  try {
+    requestedStoryMode = normalizeStoryMode(req.body.storyMode);
+  } catch (e: any) {
+    res.status(400).json({ error: e.message || "Invalid storyMode" });
     return;
   }
+
+  if (description.length > MAX_ADVANCED_PROMPT_LENGTH) {
+    res.status(400).json({
+      error: `description must be ${MAX_ADVANCED_PROMPT_LENGTH} characters or fewer`,
+    });
+    return;
+  }
+
+  const shouldUseAdvanced =
+    requestedStoryMode === "advanced" ||
+    (requestedStoryMode === "auto" && detectAdvancedStoryPrompt(description));
+  let resolvedStoryMode: "standard" | "advanced" = "standard";
+  let advancedStorySpec:
+    | ReturnType<typeof parseAdvancedStoryPrompt>
+    | undefined;
+  let count = parseInt(pageCount) || 4;
+
+  if (shouldUseAdvanced) {
+    if (description.length > MAX_ADVANCED_PROMPT_LENGTH) {
+      res.status(400).json({
+        error: `description must be ${MAX_ADVANCED_PROMPT_LENGTH} characters or fewer for advanced stories`,
+      });
+      return;
+    }
+    try {
+      advancedStorySpec = parseAdvancedStoryPrompt(description);
+      count = advancedStorySpec.pages.length;
+      resolvedStoryMode = "advanced";
+    } catch (e: any) {
+      const status = e instanceof AdvancedStoryPromptError ? 422 : 400;
+      res.status(status).json({ error: e.message || "Invalid advanced story prompt" });
+      return;
+    }
+  } else {
+    if (description.length > MAX_STANDARD_PROMPT_LENGTH) {
+      res.status(400).json({
+        error: `description must be ${MAX_STANDARD_PROMPT_LENGTH} characters or fewer for standard stories`,
+      });
+      return;
+    }
+    if (![2, 4, 8].includes(count)) {
+      res.status(400).json({ error: "pageCount must be 2, 4, or 8 for standard stories" });
+      return;
+    }
+  }
+
   if (characterIds && !Array.isArray(characterIds)) {
     res.status(400).json({ error: "characterIds must be an array" });
     return;
@@ -166,13 +224,16 @@ router.post("/book", (req: Request, res: Response) => {
     resolvedBookId,
     JSON.stringify({
       type: "generate_book",
-      description: description.slice(0, 2000),
+      storyMode: resolvedStoryMode,
+      requestedStoryMode,
+      description,
       pageCount: count,
       characterIds: characterIds || [],
       locationIds: locationIds || [],
       elementPhotoPaths: sanitizedElementPaths,
       bookId: resolvedBookId,
       generateAudio: generateAudio !== false,
+      ...(advancedStorySpec && { advancedStorySpec }),
       ...(storyModel && { storyModel }),
       ...(illustrationModel && { illustrationModel }),
       ...(coverModel && { coverModel }),

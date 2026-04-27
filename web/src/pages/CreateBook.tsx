@@ -20,6 +20,7 @@ import { ModelSelector } from "../components/ModelSelector";
 import { PhotoSourcePicker } from "../components/PhotoSourcePicker";
 
 const PAGE_COUNT_OPTIONS = [2, 4, 8];
+const ADVANCED_PROMPT_MAX_LENGTH = 50000;
 const POLL_INTERVAL_FAST = 2000;
 const POLL_INTERVAL_SLOW = 5000;
 const SLOW_THRESHOLD_MS = 30000;
@@ -45,6 +46,22 @@ type NamedEntity = {
   id: string;
   name: string;
 };
+
+type StoryMode = "auto" | "standard" | "advanced";
+
+function getAdvancedPromptPageCount(prompt: string) {
+  const matches = Array.from(prompt.matchAll(/^\s*Page\s+(\d+)\s*$/gim));
+  const pages = new Set(matches.map((match) => Number.parseInt(match[1], 10)));
+  return pages.size;
+}
+
+function detectAdvancedPrompt(prompt: string) {
+  return (
+    getAdvancedPromptPageCount(prompt) >= 2 &&
+    /^\s*Text\s*$/im.test(prompt) &&
+    /^\s*Illustration notes\s*$/im.test(prompt)
+  );
+}
 
 function tokenizeForEntityMatch(value: string) {
   return value
@@ -149,6 +166,7 @@ export function CreateBook() {
 
   const [description, setDescription] = useState("");
   const [pageCount, setPageCount] = useState(4);
+  const [storyMode, setStoryMode] = useState<StoryMode>("auto");
   const [characters, setCharacters] = useState<Character[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [locations, setLocations] = useState<LocationWithPhotos[]>([]);
@@ -208,6 +226,7 @@ export function CreateBook() {
     getBookGenerationParams(fromBookId).then((params) => {
       setDescription(params.description);
       setPageCount(params.pageCount);
+      if (params.storyMode) setStoryMode(params.storyMode);
       setSelectedIds(new Set(params.characterIds));
       setSelectedLocationIds(new Set(params.locationIds || []));
       setVariationTitle(params.title);
@@ -374,6 +393,7 @@ export function CreateBook() {
       const result = await startGeneration({
         description: description.trim(),
         pageCount,
+        storyMode,
         characterIds: Array.from(selectedIds),
         locationIds: Array.from(selectedLocationIds),
         elementPhotoPaths,
@@ -394,6 +414,10 @@ export function CreateBook() {
     illustrationModel !== modelLists.defaults.illustration ||
     coverModel !== modelLists.defaults.cover
   );
+  const detectedAdvancedPrompt = detectAdvancedPrompt(description);
+  const detectedAdvancedPageCount = getAdvancedPromptPageCount(description);
+  const usingAdvancedMode =
+    storyMode === "advanced" || (storyMode === "auto" && detectedAdvancedPrompt);
 
   const familyChars = characters.filter((c) => c.type === "family");
   const friendChars = characters.filter((c) => c.type === "friend");
@@ -419,10 +443,47 @@ export function CreateBook() {
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Dana goes on an adventure to find a magical forest where animals can talk…"
-              rows={4}
-              maxLength={2000}
+              placeholder={
+                usingAdvancedMode
+                  ? "Paste a full page-by-page story with Page 1, Text, and Illustration notes sections..."
+                  : "Dana goes on an adventure to find a magical forest where animals can talk…"
+              }
+              rows={usingAdvancedMode ? 16 : 4}
+              maxLength={ADVANCED_PROMPT_MAX_LENGTH}
             />
+            {detectedAdvancedPrompt && (
+              <p className="form-hint">
+                Advanced prompt detected: {detectedAdvancedPageCount} pages. Page text will be used exactly as written.
+              </p>
+            )}
+            {storyMode === "advanced" && !detectedAdvancedPrompt && (
+              <p className="form-hint">
+                Advanced prompts should include Page N sections with Text and Illustration notes headings.
+              </p>
+            )}
+          </div>
+
+          <div className="form-group">
+            <label>Story mode</label>
+            <div className="theme-options">
+              {[
+                { id: "auto", label: "Auto-detect" },
+                { id: "standard", label: "Standard" },
+                { id: "advanced", label: "Advanced" },
+              ].map((mode) => (
+                <button
+                  key={mode.id}
+                  className={`theme-btn ${storyMode === mode.id ? "active" : ""}`}
+                  onClick={() => setStoryMode(mode.id as StoryMode)}
+                  type="button"
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+            <p className="form-hint">
+              Advanced mode accepts exact page text and per-page illustration notes with any supported page count.
+            </p>
           </div>
 
           <div className="form-group">
@@ -451,19 +512,31 @@ export function CreateBook() {
           </div>
 
           <div className="form-group">
-            <label>Number of pages</label>
-            <div className="page-count-options">
-              {PAGE_COUNT_OPTIONS.map((n) => (
-                <button
-                  key={n}
-                  className={`page-count-btn ${pageCount === n ? "active" : ""}`}
-                  onClick={() => setPageCount(n)}
-                >
-                  {n} pages
-                </button>
-              ))}
+            {usingAdvancedMode ? (
+              <>
+                <label>Number of pages</label>
+                <p className="form-hint">
+                  The server will derive the page count from your Page sections
+                  {detectedAdvancedPageCount > 0 ? ` (${detectedAdvancedPageCount} detected).` : "."}
+                </p>
+              </>
+            ) : (
+              <>
+                <label>Number of pages</label>
+                <div className="page-count-options">
+                  {PAGE_COUNT_OPTIONS.map((n) => (
+                    <button
+                      key={n}
+                      className={`page-count-btn ${pageCount === n ? "active" : ""}`}
+                      onClick={() => setPageCount(n)}
+                    >
+                      {n} pages
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             </div>
-          </div>
 
           {characters.length > 0 && (
             <div className="form-group">

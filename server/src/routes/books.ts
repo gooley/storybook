@@ -214,6 +214,7 @@ router.get("/:id/generation-params", (req: Request, res: Response) => {
     res.json({
       description: book.description || "",
       pageCount: pageCount.count || 4,
+      storyMode: "standard",
       characterIds: [],
       locationIds: [],
       title: book.title,
@@ -225,6 +226,9 @@ router.get("/:id/generation-params", (req: Request, res: Response) => {
   res.json({
     description: payload.description || book.description || "",
     pageCount: payload.pageCount || 4,
+    storyMode: payload.storyMode || "standard",
+    requestedStoryMode: payload.requestedStoryMode || null,
+    advancedStorySpec: payload.advancedStorySpec || null,
     characterIds: payload.characterIds || [],
     locationIds: payload.locationIds || [],
     title: book.title,

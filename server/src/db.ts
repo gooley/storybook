@@ -185,6 +185,20 @@ export function migrate(): void {
     // Column already exists
   }
 
+  // Migration: store per-page generation guidance for advanced stories
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS page_generation_guidance (
+      page_id TEXT PRIMARY KEY REFERENCES pages(id) ON DELETE CASCADE,
+      story_mode TEXT NOT NULL DEFAULT 'standard',
+      illustration_notes TEXT NOT NULL DEFAULT '',
+      typesetting_notes TEXT,
+      illustration_style_guide TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_page_generation_guidance_mode ON page_generation_guidance(story_mode);
+  `);
+
   // Startup recovery: mark orphaned in-progress jobs as error
   db.prepare(`
     UPDATE generation_jobs

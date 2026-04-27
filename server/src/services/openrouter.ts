@@ -307,6 +307,20 @@ export interface PageDesign {
   sfx: SoundDesignSfx[];
 }
 
+export interface StoryGuidancePage {
+  pageNumber: number;
+  illustrationNotes: string;
+}
+
+export interface StoryGuidance {
+  audience?: string;
+  rhymeMode?: string;
+  coreRefrain?: string;
+  typesettingNotes?: string;
+  illustrationStyleGuide?: string;
+  pages?: StoryGuidancePage[];
+}
+
 const MAX_SOUND_DESIGN_AMBIENT_TRACKS = 2;
 const MAX_SOUND_DESIGN_SFX = 2;
 
@@ -315,6 +329,77 @@ function clampSfxDurationHint(value: unknown): number {
     typeof value === "number" ? value : Number.parseFloat(String(value ?? ""));
   if (!Number.isFinite(numeric)) return 6;
   return Math.max(4, Math.min(12, numeric));
+}
+
+function getPageGuidance(
+  guidance: StoryGuidance | undefined,
+  pageNumber: number
+): StoryGuidancePage | undefined {
+  return guidance?.pages?.find((page) => page.pageNumber === pageNumber);
+}
+
+function buildStoryGuidanceContext(guidance: StoryGuidance | undefined): string {
+  if (!guidance) return "";
+
+  const sections: string[] = [];
+  const metadata: string[] = [];
+  if (guidance.audience) metadata.push(`Audience: ${guidance.audience}`);
+  if (guidance.rhymeMode) metadata.push(`Rhyme mode: ${guidance.rhymeMode}`);
+  if (guidance.coreRefrain) metadata.push(`Core refrain: ${guidance.coreRefrain}`);
+  if (metadata.length > 0) {
+    sections.push(`Story-level notes:\n${metadata.join("\n")}`);
+  }
+  if (guidance.typesettingNotes) {
+    sections.push(`Typesetting notes:\n${guidance.typesettingNotes}`);
+  }
+  if (guidance.illustrationStyleGuide) {
+    sections.push(`Illustration style guide:\n${guidance.illustrationStyleGuide}`);
+  }
+  const pageNotes = guidance.pages
+    ?.filter((page) => page.illustrationNotes.trim())
+    .map((page) => `Page ${page.pageNumber}: ${page.illustrationNotes.trim()}`);
+  if (pageNotes && pageNotes.length > 0) {
+    sections.push(`User-provided per-page illustration notes:\n${pageNotes.join("\n\n")}`);
+  }
+
+  return sections.length > 0
+    ? `\n\nADVANCED STORY GUIDANCE\n${sections.join("\n\n")}`
+    : "";
+}
+
+function buildRequiredVisualGuidance(
+  guidance: StoryGuidance | undefined,
+  pageNumber: number
+): string {
+  if (!guidance) return "";
+
+  const required: string[] = [];
+  const pageGuidance = getPageGuidance(guidance, pageNumber);
+  if (pageGuidance?.illustrationNotes.trim()) {
+    required.push(`User illustration notes for this page: ${pageGuidance.illustrationNotes.trim()}`);
+  }
+  if (guidance.illustrationStyleGuide?.trim()) {
+    required.push(`Overall illustration style guide: ${guidance.illustrationStyleGuide.trim()}`);
+  }
+  if (guidance.typesettingNotes?.trim()) {
+    required.push(
+      `Typesetting/composition notes: ${guidance.typesettingNotes.trim()} Use these only to reserve space and guide composition; do not draw readable text.`
+    );
+  }
+
+  return required.join("\n");
+}
+
+function mergeVisualDirectionWithGuidance(
+  generatedDirection: string,
+  guidance: StoryGuidance | undefined,
+  pageNumber: number
+): string {
+  const cleanGenerated = generatedDirection.trim();
+  const requiredGuidance = buildRequiredVisualGuidance(guidance, pageNumber);
+  if (!requiredGuidance) return cleanGenerated;
+  if (!cleanGenerated) return requiredGuidance;
+  return `${cleanGenerated}\n\nRequired user guidance:\n${requiredGuidance}`;
 }
 
 /**
@@ -328,7 +413,8 @@ export async function generateContinuityAndSoundDesign(
   characters: CharacterRef[],
   locations: LocationRef[],
   model?: string,
-  trace?: TraceMetadata
+  trace?: TraceMetadata,
+  guidance?: StoryGuidance
 ): Promise<GenerationResult<PageDesign[]>> {
   const useModel = model || DEFAULT_STORY_MODEL;
   const startTime = Date.now();
@@ -355,6 +441,17 @@ export async function generateContinuityAndSoundDesign(
     .map((p) => `Page ${p.pageNumber}: ${p.text}`)
     .join("\n");
 
+  const guidanceContext = buildStoryGuidanceContext(guidance);
+  const advancedGuidanceRules = guidance
+    ? `
+
+ADVANCED STORY GUIDANCE RULES:
+- The user-provided page text is final. Do not revise, paraphrase, or "improve" it.
+- User-provided illustration notes are authoritative scene requirements. Your visual directions may add continuity, poses, props, lighting, safety, transitions, and recurring visual jokes, but must not contradict those notes.
+- Treat typesetting notes as composition and negative-space guidance only. Do not ask the image model to render words, letters, captions, labels, or page text.
+- Preserve cumulative/refrain visual patterns when the user specifies them.`
+    : "";
+
   const systemPrompt = `You are a creative director for a children's storybook, responsible for both illustration art direction and cost-conscious sound design. Your job is to ensure visual consistency across pages AND design immersive audio with very few generated sound clips.
 
 For EACH page, provide TWO things:
@@ -375,6 +472,7 @@ CRITICAL VISUAL RULES:
 - If a character puts on a costume/outfit on page 1, they must STILL be wearing it on subsequent pages unless the story explicitly says they changed.
 - Track the physical state of every character and prop across pages.
 - Note the setting/background for each page.
+${advancedGuidanceRules}
 
 CRITICAL SOUND RULES:
 - Ambient tracks should be atmospheric, loopable, and about 30 seconds long with no sudden starts/stops.
@@ -424,6 +522,7 @@ Return ONLY the JSON object, no other text.`;
 ${characterContext}${locationContext}
 
 ${allPagesText}
+${guidanceContext}
 
 Write visual directions and sound design for each of the ${story.pages.length} pages.`;
 
@@ -435,6 +534,7 @@ Write visual directions and sound design for each of the ${story.pages.length} p
         { role: "user", content: userPrompt },
       ],
       temperature: 0.8,
+      max_tokens: Math.min(12000, Math.max(4096, story.pages.length * 350 + 1500)),
       trace,
     });
 
@@ -474,7 +574,8 @@ Write visual directions and sound design for each of the ${story.pages.length} p
 
     // Validate and fill defaults
     let totalSfxCount = 0;
-    const designs: PageDesign[] = pageDesigns.map((pd: any) => {
+    const designs: PageDesign[] = story.pages.map((page, index) => {
+      const pd = pageDesigns[index] ?? {};
       const ambientTrackId =
         typeof pd.ambientTrackId === "string" ? pd.ambientTrackId.trim() : "";
       const ambientFromTrack = ambientTrackMap.get(ambientTrackId);
@@ -500,8 +601,11 @@ Write visual directions and sound design for each of the ${story.pages.length} p
       }
 
       return {
-        visualDirection:
+        visualDirection: mergeVisualDirectionWithGuidance(
           typeof pd.visualDirection === "string" ? pd.visualDirection : "",
+          guidance,
+          page.pageNumber
+        ),
         ambient,
         sfx,
       };
@@ -878,6 +982,7 @@ export async function generateIllustration(
   if (visualDirection) {
     prompt += `VISUAL DIRECTION FOR THIS PAGE (from the art director — follow carefully):\n`;
     prompt += `${visualDirection}\n\n`;
+    prompt += `If the visual direction includes typesetting or text-placement notes, use them only to reserve blank space and guide composition; do not render readable text in the artwork.\n\n`;
   }
 
   prompt += `Style: Sharp pen and ink illustration with bold lines. `;
