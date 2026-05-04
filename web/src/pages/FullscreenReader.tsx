@@ -4,6 +4,7 @@ import {
   getBook, getBookPages, getPageImageUrl, getPageAudio, getAudioFileUrl,
   type Book, type Page, type PageAudio,
 } from "../api/client";
+import { ShareStoryButton } from "../components/ShareStoryButton";
 import "./fullscreen-reader.css";
 
 function useAudioManager(soundEnabled: boolean) {
@@ -297,6 +298,7 @@ export function FullscreenReader() {
         <button className="fs-ctrl-btn" onClick={exitReader}>✕</button>
         <div className="fs-ctrl-title">{book.title}</div>
         <div className="fs-ctrl-right">
+          <ShareStoryButton bookId={bookId!} className="fs-ctrl-btn" label="🔗" title="Share story" />
           {hasAudio && (
             <button
               className="fs-ctrl-btn"

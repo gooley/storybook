@@ -133,6 +133,7 @@ router.delete("/:id", (req: Request, res: Response) => {
   db.prepare(
     "UPDATE pages SET deleted_at = ?, updated_at = ? WHERE book_id = ? AND deleted_at IS NULL"
   ).run(now, now, req.params.id);
+  db.prepare("DELETE FROM shared_books WHERE book_id = ?").run(req.params.id);
 
   res.status(204).send();
 });

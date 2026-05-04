@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getBook, getBookPages, getPageImageUrl, getPageAudio, getAudioFileUrl, type Book, type Page, type PageAudio } from "../api/client";
+import { ShareStoryButton } from "../components/ShareStoryButton";
 
 function useAudioManager(soundEnabled: boolean) {
   const ambientRef = useRef<HTMLAudioElement | null>(null);
@@ -164,6 +165,7 @@ export function Reader() {
         </div>
         <h2>{book.title}</h2>
         <div className="reader-nav-right">
+          <ShareStoryButton bookId={bookId!} label="🔗 Share" />
           <button className="btn btn-secondary btn-small" onClick={() => navigate(`/create?from=${bookId}`)}>🔄 Variation</button>
           <button className="btn btn-secondary btn-small" onClick={() => navigate(`/reader/${bookId}/debug`)}>🔍 Debug</button>
           <span className="reader-page-num">{currentPage + 1} / {pages.length}</span>
