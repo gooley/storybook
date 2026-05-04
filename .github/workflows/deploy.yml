@@ -137,15 +137,15 @@ jobs:
             echo "Missing Traefik X-Auth-Public-Paths label; cannot make /s/* public"
             exit 1
           fi
-          if grep -q "X-Auth-Public-Paths=.*\/s\/\*" docker-compose.yml; then
+          if grep -Eq "X-Auth-Public-Paths=.*/s/\*" docker-compose.yml; then
             echo "/s/* already public"
             exit 0
           fi
           awk '{
-            if ($0 ~ /X-Auth-Public-Paths=/ && $0 !~ /\/s\/\*/) {
-              if ($0 ~ /"$/) sub(/"$/, ",/s/*\"");
-              else if ($0 ~ /'\''$/) sub(/'\''$/, ",/s/*'\''");
-              else $0 = $0 ",/s/*";
+            if (\$0 ~ /X-Auth-Public-Paths=/ && \$0 !~ /\/s\/\*/) {
+              if (\$0 ~ /"$/) sub(/"$/, ",/s/*\"");
+              else if (\$0 ~ /'\''$/) sub(/'\''$/, ",/s/*'\''");
+              else \$0 = \$0 ",/s/*";
             }
             print;
           }' docker-compose.yml > docker-compose.tmp
