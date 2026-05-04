@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { getBooks, getBookCoverUrl, updateBook, type Book } from "../api/client";
+import { ShareStoryButton } from "../components/ShareStoryButton";
 
 export function Books() {
   const [books, setBooks] = useState<Book[]>([]);
@@ -79,6 +80,7 @@ export function Books() {
               >
                 🔍
               </button>
+              <ShareStoryButton bookId={book.id} className="share-btn" label="🔗" />
               <button
                 className="visibility-btn"
                 onClick={(e) => toggleHidden(e, book)}

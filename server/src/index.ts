@@ -13,6 +13,8 @@ import generateRouter from "./routes/generate";
 import modelsRouter from "./routes/models";
 import setupRouter from "./routes/setup";
 import authRouter from "./routes/auth";
+import { handleCreateShare, handleDeleteShare, handleGetShare } from "./routes/shares";
+import { getSharedBook, renderSharedBookPage } from "./services/share";
 import { startWorker, stopWorker } from "./services/generation";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
@@ -48,12 +50,25 @@ app.get("/api/healthz", (_req, res) => {
   res.json({ status: "ok", timestamp: Date.now() });
 });
 
+// Public shared stories (no auth)
+app.get("/s/:shareId", (req, res) => {
+  const shared = getSharedBook(req.params.shareId);
+  if (!shared) {
+    res.status(404).send("Not found");
+    return;
+  }
+  res.type("html").send(renderSharedBookPage(shared));
+});
+
 // Auth middleware — gates all /api/* routes except public ones
 app.use("/api", authMiddleware);
 
 // API routes
 app.use("/api/setup", setupRouter);
 app.use("/api/auth", authRouter);
+app.get("/api/books/:id/share", handleGetShare);
+app.post("/api/books/:id/share", handleCreateShare);
+app.delete("/api/books/:id/share", handleDeleteShare);
 app.use("/api/characters", charactersRouter);
 app.use("/api/locations", locationsRouter);
 app.use("/api/books", booksRouter);

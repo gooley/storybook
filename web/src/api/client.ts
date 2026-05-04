@@ -149,6 +149,23 @@ export const getBookPages = (id: string) => request<Page[]>(`/books/${id}/pages`
 export const getBookCoverUrl = (id: string) => `${BASE}/books/${id}/cover`;
 export const getPageImageUrl = (pageId: string) => `${BASE}/books/pages/${pageId}/image`;
 
+export interface BookShare {
+  id: string;
+  book_id: string;
+  title: string | null;
+  url: string;
+  created_at: number;
+  updated_at: number;
+  isNew?: boolean;
+}
+
+export const getBookShare = (bookId: string) =>
+  request<BookShare | null>(`/books/${bookId}/share`);
+export const createBookShare = (bookId: string) =>
+  request<{ ok: true; share: BookShare }>(`/books/${bookId}/share`, { method: "POST" });
+export const deleteBookShare = (bookId: string) =>
+  request<{ ok: true }>(`/books/${bookId}/share`, { method: "DELETE" });
+
 // Generation API
 export const startGeneration = (data: {
   description: string;

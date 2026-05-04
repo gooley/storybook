@@ -139,6 +139,18 @@ export function migrate(): void {
       value TEXT,
       updated_at INTEGER DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS shared_books (
+      id TEXT PRIMARY KEY,
+      book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+      title TEXT,
+      snapshot_html TEXT NOT NULL,
+      snapshot_metadata TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_shared_books_book_id ON shared_books(book_id);
   `);
 
   // Migration: add hidden column to books (safe to run on existing DBs)
